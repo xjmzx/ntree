@@ -3,8 +3,8 @@ BINDIR  ?= $(PREFIX)/bin
 APPDIR  ?= $(PREFIX)/share/applications
 ICONDIR ?= $(PREFIX)/share/icons/hicolor/scalable/apps
 
-DESKTOP_OUT := $(APPDIR)/audio-flac-quality-check-tauri.desktop
-TAURI_BIN   := src-tauri/target/release/audio-flac-quality-check-tauri
+DESKTOP_OUT := $(APPDIR)/ndisc-tree.desktop
+TAURI_BIN   := src-tauri/target/release/ndisc-tree
 
 .PHONY: help deps dev build install uninstall check clean icons
 
@@ -51,22 +51,22 @@ check:
 
 install: $(TAURI_BIN)
 	install -d $(BINDIR) $(APPDIR) $(ICONDIR)
-	install -m 0755 $(TAURI_BIN) $(BINDIR)/audio-flac-quality-check-tauri
-	install -m 0644 icon.svg     $(ICONDIR)/audio-flac-quality-check-tauri.svg
+	install -m 0755 $(TAURI_BIN) $(BINDIR)/ndisc-tree
+	install -m 0644 icon.svg     $(ICONDIR)/ndisc-tree.svg
 	sed -e 's|@BINDIR@|$(BINDIR)|g' \
 	    -e 's|@ICONDIR@|$(ICONDIR)|g' \
-	    audio-flac-quality-check-tauri.desktop.in > $(DESKTOP_OUT)
+	    ndisc-tree.desktop.in > $(DESKTOP_OUT)
 	chmod 0644 $(DESKTOP_OUT)
 	@if command -v update-desktop-database >/dev/null 2>&1; then \
 		update-desktop-database $(APPDIR) >/dev/null 2>&1 || true; \
 	fi
 	@echo "installed to $(PREFIX)"
-	@echo "  binary  -> $(BINDIR)/audio-flac-quality-check-tauri"
+	@echo "  binary  -> $(BINDIR)/ndisc-tree"
 	@echo "  desktop -> $(DESKTOP_OUT)"
 
 uninstall:
-	rm -f $(BINDIR)/audio-flac-quality-check-tauri
-	rm -f $(ICONDIR)/audio-flac-quality-check-tauri.svg
+	rm -f $(BINDIR)/ndisc-tree
+	rm -f $(ICONDIR)/ndisc-tree.svg
 	rm -f $(DESKTOP_OUT)
 	@if command -v update-desktop-database >/dev/null 2>&1; then \
 		update-desktop-database $(APPDIR) >/dev/null 2>&1 || true; \

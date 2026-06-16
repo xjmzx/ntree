@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    audio_flac_quality_check_tauri_lib::run()
+    ndisc_tree_lib::run()
 }

@@ -1,11 +1,11 @@
-// Reaction aggregator + publish/delete wrapper for blobtree's FeedPanel.
+// Reaction aggregator + publish/delete wrapper for ndisc.tree's FeedPanel.
 //
 // Reads kind:7 events via SimplePool (no signing required for reads).
 // Writes go through Rust commands — `publish_reaction` / `delete_reaction`
 // — so the secret key never leaves the keychain → renderer boundary.
 //
 // Ported from ndisc.view's useReactions hook with two adaptations:
-//   - blobtree reacts to non-replaceable events (kind:1063), so the
+//   - ndisc.tree reacts to non-replaceable events (kind:1063), so the
 //     filter / dedup key is the event id (`#e`) instead of an `a` tag
 //     replaceable address (`kind:pubkey:d`).
 //   - signing is Rust-side (nostr-sdk), not in-browser NIP-46.

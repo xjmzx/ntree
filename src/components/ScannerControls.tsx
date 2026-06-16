@@ -210,7 +210,8 @@ export function ScannerControls({ root, setRoot, onReport, onStatus, onScanState
           onKeyDown={(e) => e.key === "Enter" && requestScan()}
           placeholder="/path/to/music"
           disabled={busy}
-          className="flex-1 px-3 py-2 rounded-md bg-surface text-fg
+          title={root}
+          className="flex-1 min-w-0 px-3 py-2 rounded-md bg-surface text-fg
                      placeholder:text-muted outline-none border border-transparent
                      focus:border-accent/50 disabled:opacity-50"
           spellCheck={false}

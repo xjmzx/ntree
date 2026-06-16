@@ -1,4 +1,4 @@
-// Nostr identity helpers for audio-flac-quality-check-tauri.
+// Nostr identity helpers for ndisc.tree.
 //
 // The nsec lives in the OS keychain (libsecret on Linux) via the Rust
 // `keyring` crate — never in localStorage. Mirrors ndisc's pattern.

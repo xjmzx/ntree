@@ -1,5 +1,5 @@
 [package]
-name = "audio-flac-quality-check-tauri"
+name = "ndisc-tree"
 version = "0.2.7"
 description = "FLAC library quality scanner — spectral high-frequency analysis to flag lossy-source files"
 authors = ["xjmzx"]
@@ -11,7 +11,7 @@ edition = "2021"
 # The `_lib` suffix may seem redundant but it is necessary
 # to make the lib name unique and wouldn't conflict with the bin name.
 # This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
-name = "audio_flac_quality_check_tauri_lib"
+name = "ndisc_tree_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
 [build-dependencies]

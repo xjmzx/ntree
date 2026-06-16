@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "audio-flac-quality-check-tauri",
+  "productName": "ndisc-tree",
   "version": "0.2.7",
   "identifier": "uk.fizx.audioflacqualitycheck",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "ndisc.blobtree",
+        "title": "ndisc.tree",
         "width": 1180,
         "height": 760,
         "minWidth": 720,

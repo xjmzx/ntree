@@ -272,27 +272,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
-name = "audio-flac-quality-check-tauri"
-version = "0.2.7"
-dependencies = [
- "chrono",
- "keyring",
- "nostr",
- "nostr-sdk",
- "rayon",
- "regex",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-dialog",
- "tauri-plugin-opener",
- "trash",
- "wait-timeout",
- "walkdir",
-]
-
-[[package]]
 name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2364,6 +2343,27 @@ dependencies = [
  "serde",
  "thiserror 2.0.18",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "ndisc-tree"
+version = "0.2.7"
+dependencies = [
+ "chrono",
+ "keyring",
+ "nostr",
+ "nostr-sdk",
+ "rayon",
+ "regex",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-dialog",
+ "tauri-plugin-opener",
+ "trash",
+ "wait-timeout",
+ "walkdir",
 ]
 
 [[package]]

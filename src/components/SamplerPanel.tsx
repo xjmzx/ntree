@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { FolderOpen, Scissors, Square } from "lucide-react";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { Section } from "./Section";
@@ -21,6 +22,8 @@ interface SamplerPanelProps {
   onCancelSample: () => void;
   /** Render bare (no Section card) — for the merged Source & Destination panel. */
   bare?: boolean;
+  /** Extra controls rendered at the end of the dest control row (mirror tree). */
+  trailing?: ReactNode;
 }
 
 export function SamplerPanel({
@@ -31,6 +34,7 @@ export function SamplerPanel({
   onSample,
   onCancelSample,
   bare = false,
+  trailing,
 }: SamplerPanelProps) {
   const [expanded, setExpanded] = usePersistedBool(EXPANDED_KEY, true);
   const open = bare || expanded;
@@ -68,7 +72,8 @@ export function SamplerPanel({
           onChange={(e) => setDest(e.target.value)}
           placeholder="/path/to/samples"
           disabled={running}
-          className="flex-1 px-3 py-2 rounded-md bg-surface text-fg
+          title={dest}
+          className="flex-1 min-w-0 px-3 py-2 rounded-md bg-surface text-fg
                      placeholder:text-muted outline-none border border-transparent
                      focus:border-accent/50 disabled:opacity-50"
           spellCheck={false}
@@ -119,6 +124,7 @@ export function SamplerPanel({
             <Scissors size={14} />
           </button>
         )}
+        {trailing}
       </div>
 
         </>

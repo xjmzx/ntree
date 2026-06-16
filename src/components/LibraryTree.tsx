@@ -4,13 +4,12 @@ import {
   ChevronRight,
   ChevronsDownUp,
   ChevronsUpDown,
-  Disc,
-  FileAudio,
   Pause,
   Play,
-  Scissors,
+  Sprout,
   Upload,
 } from "lucide-react";
+import { LeafIcon } from "./LeafIcon";
 import { cn } from "../lib/cn";
 import { splitPath } from "../lib/paths";
 import { openFolder, type ScanRow, type Verdict } from "../lib/tauri";
@@ -88,71 +87,48 @@ function countsFor(tracks: TrackRow[]): Record<Verdict, number> {
 }
 
 /**
- * Zero-padded numeric display where the leading zeros are dimmed to
- * `text-muted/40` and the significant digits use `text-fg` (white).
- * Used for both the album-count slot (width=3 → "001") and the
- * track-count slot (width=4 → "0042"). Keeps the columns visually
- * tidy across rows while letting the eye snap to the actual figure.
+ * Foliage meter — a fixed-width magnitude gauge. Three slots of the same
+ * glyph (leaves for tracks, sprouts for releases); the first `litCount(n)`
+ * are lit, the rest dimmed. The exact figure is unimportant on the row (it
+ * lives in the title/hover) — the point is a glanceable "how much", and the
+ * fixed three-slot width keeps every row aligned across all filtered views.
  */
-function PaddedNum({ n, w }: { n: number; w: number }) {
-  const s = String(n).padStart(w, "0");
-  const i = s.search(/[1-9]/);
-  if (i < 0) {
-    // All zeros — value is 0; render full width muted so the slot
-    // still occupies space and aligns with neighbours.
-    return <span className="text-muted/40">{s}</span>;
-  }
-  return (
-    <>
-      {i > 0 && <span className="text-muted/40">{s.slice(0, i)}</span>}
-      <span className="text-fg">{s.slice(i)}</span>
-    </>
-  );
+function litCount(n: number, kind: "leaf" | "plant"): number {
+  if (n <= 0) return 0;
+  if (kind === "leaf") return n >= 50 ? 3 : n >= 10 ? 2 : 1;
+  return n >= 10 ? 3 : n >= 3 ? 2 : 1;
 }
 
-/**
- * Compact 5-segment proportional bar showing the verdict distribution
- * for a scope (artist or album). Same color scheme + tooltips as the
- * library-health bar in the App header; smaller dimensions to fit
- * inline next to the track count on each tree row.
- */
-function VerdictBar({
-  counts,
-  total,
+function Meter({
+  n,
+  kind,
+  title,
 }: {
-  counts: Record<Verdict, number>;
-  total: number;
+  n: number;
+  kind: "leaf" | "plant";
+  title: string;
 }) {
-  if (total === 0) return null;
-  const seg = (n: number) => (100 * n) / total;
+  const lit = litCount(n, kind);
+  const Glyph = kind === "leaf" ? LeafIcon : Sprout;
   return (
-    <div className="w-24 h-1 rounded-sm overflow-hidden bg-bg/60 flex shrink-0">
-      <div
-        className="h-full bg-ok"
-        style={{ width: `${seg(counts.LOSSLESS)}%` }}
-        title={`LOSSLESS ${counts.LOSSLESS}`}
-      />
-      <div
-        className="h-full bg-alert"
-        style={{ width: `${seg(counts["PROBABLY-LOSSY"])}%` }}
-        title={`PROBABLY-LOSSY ${counts["PROBABLY-LOSSY"]}`}
-      />
-      <div
-        className="h-full bg-warn"
-        style={{ width: `${seg(counts.UNCERTAIN)}%` }}
-        title={`UNCERTAIN ${counts.UNCERTAIN}`}
-      />
-      <div
-        className="h-full bg-mauve"
-        style={{ width: `${seg(counts.LOSSY)}%` }}
-        title={`LOSSY ${counts.LOSSY}`}
-      />
-      <div
-        className="h-full bg-muted"
-        style={{ width: `${seg(counts.UNKNOWN)}%` }}
-        title={`UNKNOWN ${counts.UNKNOWN}`}
-      />
-    </div>
+    <span
+      className="inline-flex items-center gap-0.5"
+      title={title}
+      aria-label={title}
+    >
+      {[0, 1, 2].map((i) => (
+        <Glyph
+          key={i}
+          size={12}
+          className={cn(
+            // leaves share the filter bar's ~10°-past-12:00 lean; sprouts
+            // stay upright (they're plants, not leaves).
+            kind === "leaf" && "rotate-[10deg]",
+            i < lit ? "text-fg/70" : "text-muted/25",
+          )}
+        />
+      ))}
+    </span>
   );
 }
 
@@ -171,8 +147,8 @@ interface LibraryTreeProps {
   onSampleScope: (label: string, tracks: ScanRow[]) => void;
   /**
    * Returns true if a 10-second clip exists under the workspace dest for
-   * the given row. Used to tint the Scissors icon (muted → ok green) on
-   * artist/album rows that already have samples on disk.
+   * the given row. Used to tint the leaf sample button (grey → green, or
+   * purple when partial) on artist/album rows that already have clips.
    */
   hasSample: (row: ScanRow) => boolean;
   /**
@@ -205,23 +181,20 @@ export function LibraryTree({
   const [openArtists, setOpenArtists] = useState<Set<string>>(new Set());
   const [openAlbums, setOpenAlbums] = useState<Set<string>>(new Set());
 
-  // Expand everything only on the *transition into* filtering (matches Tk
-  // behaviour) — not on every keystroke. Previously the `artists` dep made
-  // this re-expand (two full Set rebuilds + a whole-tree re-render) on each
-  // character typed, which was the bulk of the search lag.
+  // Entering a filter starts the view fully collapsed — artists AND releases —
+  // exactly like startup and Collapse-all. Only the matching artists are
+  // listed; click to drill in. Acting only on the transition into filtering
+  // (guarded by the ref) means a manual expand made while refining the query
+  // sticks. It's also the cheapest render: nothing but artist rows mounts
+  // until you open one.
   const wasFiltering = useRef(false);
   useEffect(() => {
     if (anyFilter && !wasFiltering.current) {
-      // Expand artists so matching releases show, but keep albums COLLAPSED —
-      // their track rows render on demand. A loose filter otherwise mounts
-      // thousands of track rows at once (the search-bar CPU spike); this caps
-      // the filtered render at ~artists+albums, glmps-style "browse the
-      // matches, drill in". Each album row's count already reflects matches.
-      setOpenArtists(new Set(artists.map((a) => a.name)));
+      setOpenArtists(new Set());
       setOpenAlbums(new Set());
     }
     wasFiltering.current = anyFilter;
-  }, [anyFilter, artists]);
+  }, [anyFilter]);
 
   function toggleArtist(name: string) {
     const next = new Set(openArtists);
@@ -293,7 +266,6 @@ export function LibraryTree({
         )}
         {artists.map((artist) => {
           const isOpen = openArtists.has(artist.name);
-          const ac = artist.verdictCounts;
           const allArtistTracks = artist.albums.flatMap((a) => a.tracks);
           const sampledHere = allArtistTracks.filter(hasSample).length;
           const sampleState =
@@ -302,13 +274,13 @@ export function LibraryTree({
               : sampledHere === allArtistTracks.length
                 ? "all"
                 : "partial";
-          const scissorsClass =
+          const leafClass =
             sampleState === "all"
               ? "text-ok"
               : sampleState === "partial"
                 ? "text-mauve"
                 : "text-muted";
-          const scissorsTitle =
+          const leafTitle =
             sampleState === "all"
               ? `All ${allArtistTracks.length} tracks already sampled · click to re-sample`
               : sampleState === "partial"
@@ -324,51 +296,38 @@ export function LibraryTree({
                 >
                   {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                   <span className="flex-1 truncate">{artist.name}</span>
-                  {/*
-                    Fixed-width digit slots — album count zero-padded to
-                    3, track count to 4. Leading zeros dimmed; significant
-                    digits white. Disc icon and tiny file icon flank the
-                    bar so it's clear what each number counts.
-                  */}
-                  <span className="text-xs text-muted font-normal flex items-center gap-2 shrink-0 tabular-nums">
-                    <span
-                      className="inline-flex items-center gap-1"
+                  {/* Foliage meter — plants = releases, leaves = tracks.
+                      Both fixed three-slot gauges (magnitude, not exact
+                      counts) so the column aligns on every row. */}
+                  <span className="flex items-center gap-2 shrink-0">
+                    <Meter
+                      n={artist.albums.length}
+                      kind="plant"
                       title={`${artist.albums.length} release${artist.albums.length === 1 ? "" : "s"}`}
-                    >
-                      <span className="w-6 text-right">
-                        <PaddedNum n={artist.albums.length} w={3} />
-                      </span>
-                      <Disc size={11} aria-hidden />
-                    </span>
-                    <VerdictBar counts={ac} total={artist.totalTracks} />
-                    <span
-                      className="inline-flex items-center gap-1"
+                    />
+                    <Meter
+                      n={artist.totalTracks}
+                      kind="leaf"
                       title={`${artist.totalTracks.toLocaleString()} track${artist.totalTracks === 1 ? "" : "s"}`}
-                    >
-                      <span className="w-8 text-right">
-                        <PaddedNum n={artist.totalTracks} w={4} />
-                      </span>
-                      <FileAudio size={10} aria-hidden />
-                    </span>
+                    />
                   </span>
                 </button>
                 <button
                   onClick={() => onSampleScope(artist.name, allArtistTracks)}
-                  title={scissorsTitle}
+                  title={leafTitle}
                   className={cn(
                     "ml-2 px-2 py-1 rounded hover:text-accent hover:bg-surface/40 shrink-0",
-                    scissorsClass,
+                    leafClass,
                   )}
                   aria-label={`Sample all tracks by ${artist.name}`}
                 >
-                  <Scissors size={12} />
+                  <LeafIcon size={14} className="rotate-[10deg]" />
                 </button>
               </div>
               {isOpen &&
                 artist.albums.map((album) => {
                   const key = `${artist.name}//${album.name}`;
                   const alOpen = openAlbums.has(key);
-                  const albumCounts = album.verdictCounts;
                   const alSampled = album.tracks.filter(hasSample).length;
                   const alState =
                     alSampled === 0
@@ -376,13 +335,13 @@ export function LibraryTree({
                       : alSampled === album.tracks.length
                         ? "all"
                         : "partial";
-                  const alScissorsClass =
+                  const alLeafClass =
                     alState === "all"
                       ? "text-ok"
                       : alState === "partial"
                         ? "text-mauve"
                         : "text-muted";
-                  const alScissorsTitle =
+                  const alLeafTitle =
                     alState === "all"
                       ? `All ${album.tracks.length} tracks already sampled · click to re-sample`
                       : alState === "partial"
@@ -398,32 +357,27 @@ export function LibraryTree({
                         >
                           {alOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                           <span className="flex-1 truncate">{album.name}</span>
-                          <span className="text-xs text-muted not-italic flex items-center gap-2 shrink-0 tabular-nums">
-                            <VerdictBar
-                              counts={albumCounts}
-                              total={album.tracks.length}
-                            />
-                            <span
-                              className="inline-flex items-center gap-1"
+                          {/* leaves = tracks (one release ⇒ no plant meter);
+                              right-anchored so it aligns under the artist
+                              leaf meter above. */}
+                          <span className="flex items-center shrink-0">
+                            <Meter
+                              n={album.tracks.length}
+                              kind="leaf"
                               title={`${album.tracks.length.toLocaleString()} track${album.tracks.length === 1 ? "" : "s"}`}
-                            >
-                              <span className="w-8 text-right">
-                                <PaddedNum n={album.tracks.length} w={4} />
-                              </span>
-                              <FileAudio size={10} aria-hidden />
-                            </span>
+                            />
                           </span>
                         </button>
                         <button
                           onClick={() => onSampleScope(`${artist.name} / ${album.name}`, album.tracks)}
-                          title={alScissorsTitle}
+                          title={alLeafTitle}
                           className={cn(
                             "ml-2 px-2 py-1 rounded hover:text-accent hover:bg-surface/40 shrink-0",
-                            alScissorsClass,
+                            alLeafClass,
                           )}
                           aria-label={`Sample release ${album.name}`}
                         >
-                          <Scissors size={12} />
+                          <LeafIcon size={14} className="rotate-[10deg]" />
                         </button>
                       </div>
                       {alOpen &&

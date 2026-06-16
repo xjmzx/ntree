@@ -3,7 +3,7 @@ import { usePersistedString } from "./usePersistedString";
 import type { ScanReport } from "./tauri";
 
 // ---------------------------------------------------------------------------
-// blobtree's library "store" — the single home for the app's DB + config.
+// ndisc.tree's library "store" — the single home for the app's DB + config.
 //
 // "DB" here is the scan report (a JSON document persisted by the Rust side as
 // last_scan.json; load/save live in lib/tauri). "Config" is the small set of
@@ -19,13 +19,13 @@ import type { ScanReport } from "./tauri";
 // ---------------------------------------------------------------------------
 // UNIVERSALISING DB MANAGEMENT ACROSS THE ndisc SUITE (reference + spec)
 //
-// ndisc, ndisc.smpl and ndisc.blobtree each carry a near-identical shape:
+// ndisc, ndisc.smpl and ndisc.tree each carry a near-identical shape:
 // a local "DB" + a handful of persisted path/config scalars + derived
 // selectors over them. They will NOT share features 1:1, but they CAN share
 // this *contract*. What a shared `@ndisc/library` (or copied spec) would need:
 //
 //  1. A DB abstraction with a uniform lifecycle: load() on mount, a current
-//     snapshot in state, save() on mutation. blobtree's DB is a JSON report;
+//     snapshot in state, save() on mutation. ndisc.tree's DB is a JSON report;
 //     ndisc/smpl use SQLite (rusqlite). So the shared piece is the *interface*
 //     (load / snapshot / save / path), not the storage engine.
 //  2. Config as a typed, namespaced, persisted key set. Today each app

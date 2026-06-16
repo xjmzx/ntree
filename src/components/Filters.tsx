@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { ChevronDown, Search } from "lucide-react";
 import { VERDICTS, type Verdict } from "../lib/tauri";
 import { cn } from "../lib/cn";
+import { LeafIcon } from "./LeafIcon";
 
 export type SampleFilter = "all" | "sampled" | "unsampled";
 
@@ -18,24 +19,13 @@ export interface FilterState {
 interface FiltersProps {
   filter: FilterState;
   setFilter: (f: FilterState) => void;
-  counts: Record<Verdict, number>;
-  total: number;
 }
-
-const VERDICT_COLOR: Record<Verdict, string> = {
-  LOSSLESS: "text-ok",
-  "PROBABLY-LOSSY": "text-alert",
-  UNCERTAIN: "text-warn",
-  LOSSY: "text-mauve",
-  UNKNOWN: "text-muted",
-};
 
 /**
  * Bare filter controls — no Section wrapper of its own; the parent
- * Library Section embeds these as a header band. Hidden when the
- * Library Section is collapsed.
+ * Library Section embeds these as a header band.
  */
-export function Filters({ filter, setFilter, counts, total }: FiltersProps) {
+export function Filters({ filter, setFilter }: FiltersProps) {
   const searchRef = useRef<HTMLInputElement>(null);
 
   // Local search text so typing is instant; the expensive committed filter
@@ -92,43 +82,47 @@ export function Filters({ filter, setFilter, counts, total }: FiltersProps) {
         />
       </div>
 
-      {/* Clip-exists toggle — has-clip / no-clip on disk, same round-dot
-          language as the Mirror tree's has/no-audio chips. */}
-      <div
-        className="flex items-center gap-1 text-xs"
-        title="Filter by whether a 10s clip exists on disk"
-      >
-        {(
-          [
-            ["all", "all", null],
-            ["sampled", "has clip", true],
-            ["unsampled", "no clip", false],
-          ] as const
-        ).map(([key, label, dot]) => (
+      {/* Clip-exists filter — one leaf toggle that cycles the three states:
+          off (grey, all) → has clip (green) → no clip (purple) → off. A single
+          button reads as a toggle; colour carries the state. Square-rounded bg,
+          leaf sized near-max to the control height, leaning ~10° past 12:00. */}
+      {(() => {
+        const next: Record<SampleFilter, SampleFilter> = {
+          all: "sampled",
+          sampled: "unsampled",
+          unsampled: "all",
+        };
+        const STATE: Record<SampleFilter, { cls: string; title: string }> = {
+          all: {
+            cls: "bg-surface text-muted hover:text-fg",
+            title: "Clip filter off — all tracks. Click to show only tracks with a clip.",
+          },
+          sampled: {
+            cls: "bg-accent text-bg",
+            title: "Showing only tracks with a clip. Click to show only tracks without one.",
+          },
+          unsampled: {
+            cls: "bg-mauve text-bg",
+            title: "Showing only tracks without a clip. Click to clear.",
+          },
+        };
+        const s = STATE[filter.sample];
+        return (
           <button
-            key={key}
             type="button"
-            onClick={() => setFilter({ ...filter, sample: key as SampleFilter })}
-            aria-pressed={filter.sample === key}
+            onClick={() => setFilter({ ...filter, sample: next[filter.sample] })}
+            aria-pressed={filter.sample !== "all"}
+            aria-label="Clip filter"
+            title={s.title}
             className={cn(
-              "flex items-center gap-1.5 px-2.5 py-1.5 rounded-md transition-colors",
-              filter.sample === key
-                ? "bg-bg text-fg"
-                : "text-muted hover:text-fg hover:bg-bg/50",
+              "flex items-center justify-center h-9 w-9 rounded-md transition-colors",
+              s.cls,
             )}
           >
-            {dot !== null && (
-              <span
-                className={cn(
-                  "w-2 h-2 rounded-full",
-                  dot ? "bg-accent" : "border border-muted/70",
-                )}
-              />
-            )}
-            {label}
+            <LeafIcon size={28} className="rotate-[10deg]" />
           </button>
-        ))}
-      </div>
+        );
+      })()}
 
       <div className="flex-1 min-w-[200px] relative">
         <Search
@@ -148,17 +142,6 @@ export function Filters({ filter, setFilter, counts, total }: FiltersProps) {
         />
       </div>
 
-      {total > 0 && (
-        <div className="ml-auto text-xs text-muted flex flex-wrap gap-x-4 gap-y-1
-                        items-center justify-end text-right">
-          <span>{total.toLocaleString()} tracks</span>
-          {VERDICTS.filter((v) => counts[v] > 0).map((v) => (
-            <span key={v} className={VERDICT_COLOR[v]}>
-              {counts[v].toLocaleString()} {v.toLowerCase()}
-            </span>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

@@ -3,11 +3,13 @@ import {
   AlertTriangle,
   ArrowRightLeft,
   Check,
+  Columns2,
   FolderTree,
   KeyRound,
   Lock,
   LogOut,
-  PanelRight,
+  PanelLeftClose,
+  PanelRightClose,
   Radio,
 } from "lucide-react";
 import { getVersion } from "@tauri-apps/api/app";
@@ -20,7 +22,8 @@ import { LibraryTree } from "./components/LibraryTree";
 import { OperationOutput, type MirrorState } from "./components/OperationOutput";
 import { PublishSampleDialog } from "./components/PublishSampleDialog";
 import { Section } from "./components/Section";
-import { WorkspacePanel } from "./components/WorkspacePanel";
+import { MirrorControls, OrphanStrip } from "./components/MirrorControls";
+import { useMirror } from "./lib/useMirror";
 import { FeedPanel } from "./components/FeedPanel";
 import { NostrPanel } from "./components/NostrPanel";
 import {
@@ -145,21 +148,12 @@ export default function App() {
   }>({ active: false, progress: null, cancelling: false });
   const [mirrorState, setMirrorState] = useState<MirrorState>({ kind: "idle" });
 
-  // Merged Library section's collapse state. When collapsed: filter band
-  // hides AND the tree forces sample="sampled" on top of whatever other
-  // filters the user has set. Hierarchy + expand/collapse-all stay intact.
-  const [libraryExpanded, setLibraryExpanded] = usePersistedString(
-    "afqc-tauri.library.expanded",
-    "1",
-  );
-  const libraryOpen = libraryExpanded === "1";
-  // Destination rail (Mirror orphans + feed) — collapsible so the Library
-  // (source) can go full-width. Persisted; default open.
-  const [railExpanded, setRailExpanded] = usePersistedString(
-    "afqc-tauri.rail.open",
-    "1",
-  );
-  const railOpen = railExpanded === "1";
+  // Main-row layout — three ways to split the Library (source) and the
+  // Nostr · Radio rail: full Library, split (both), or full Radio. Persisted.
+  const [layout, setLayout] = usePersistedString("afqc-tauri.layout", "split");
+  const showLibrary = layout !== "radio";
+  const showRail = layout !== "library";
+  const railFull = layout === "radio";
 
   const audioRef = useRef<HTMLAudioElement | null>(null);
   // Track the current object URL so we can revoke it when playback ends
@@ -412,22 +406,17 @@ export default function App() {
   const filteredRows: ScanRow[] = useMemo(() => {
     if (!report) return [];
     const q = filter.search.trim().toLowerCase();
-    // When the Library section is collapsed, overlay "sampled only" on
-    // top of whatever the user has set. User's sample state is preserved
-    // — restored on expand. Other filter dimensions (verdict, search)
-    // continue to apply.
-    const effectiveSample = libraryOpen ? filter.sample : "sampled";
     return report.rows.filter((r, i) => {
       if (filter.verdict !== "All" && r.verdict !== filter.verdict) return false;
       if (q && !lowerPaths[i].includes(q)) return false;
-      if (effectiveSample !== "all") {
+      if (filter.sample !== "all") {
         const has = sampledSignatures.has(sourceSignature(r.path, libRoot));
-        if (effectiveSample === "sampled" && !has) return false;
-        if (effectiveSample === "unsampled" && has) return false;
+        if (filter.sample === "sampled" && !has) return false;
+        if (filter.sample === "unsampled" && has) return false;
       }
       return true;
     });
-  }, [report, filter, sampledSignatures, libRoot, libraryOpen, lowerPaths]);
+  }, [report, filter, sampledSignatures, libRoot, lowerPaths]);
 
   const counts = useMemo(() => {
     const c: Record<Verdict, number> = {
@@ -444,8 +433,40 @@ export default function App() {
   const anyFilter =
     filter.verdict !== "All" ||
     filter.search.trim() !== "" ||
-    filter.sample !== "all" ||
-    !libraryOpen;  // collapsed Library overlays sample="sampled"
+    filter.sample !== "all";
+
+  // Destination-tree logic (pkexec + create-mirror + orphan listing), decoupled
+  // from any one panel: the controls render in the Source & destination strip,
+  // the orphan list as a strip below it.
+  const mirror = useMirror({
+    rows: filteredRows,
+    libRoot,
+    dest: workspaceDest,
+    sourceRels,
+    onStatus: setStatus,
+    onMirrorState: setMirrorState,
+  });
+
+  // Library totals for the section header — full library, or "filtered / total"
+  // when a filter is active.
+  const libraryStats = useMemo(() => {
+    const all = report?.rows ?? [];
+    const allPairs = uniquePairs(all, libRoot);
+    const total = {
+      artists: new Set(allPairs.map((p) => p.artist)).size,
+      releases: allPairs.length,
+      tracks: all.length,
+    };
+    if (!anyFilter) return { ...total, filtered: false as const, total };
+    const fPairs = uniquePairs(filteredRows, libRoot);
+    return {
+      artists: new Set(fPairs.map((p) => p.artist)).size,
+      releases: fPairs.length,
+      tracks: filteredRows.length,
+      filtered: true as const,
+      total,
+    };
+  }, [report, filteredRows, libRoot, anyFilter]);
 
   return (
     <div className="h-screen p-6 max-w-[1400px] mx-auto flex flex-col gap-4">
@@ -467,7 +488,7 @@ export default function App() {
           >
             <span className="text-accent">n</span>
             <span className="text-fg">disc</span>
-            <span className="text-mauve">.blobtree</span>
+            <span className="text-mauve">.tree</span>
           </button>
           {appVersion &&
             (() => {
@@ -504,13 +525,8 @@ export default function App() {
             })()}
         </div>
         {/*
-          Last-scan module: date + file count + 4-segment proportional bar
-          (LOSSLESS / PROBABLY-LOSSY / UNCERTAIN / Other). Lives in the
-          middle grid column (1fr_auto_1fr) so it's centered between the
-          title and the right edge.
-          TODO: drive the bar from `filteredRows` instead of `counts` so it
-          updates with the current filter — also rework the count line so
-          it can show e.g. "4,222 / 9,744" when narrowed.
+          Last-scan module: 5-segment proportional verdict bar in the middle
+          grid column (1fr_auto_1fr), centered between title and right edge.
         */}
         {report && (
           <div className="hidden md:flex flex-col items-center gap-1.5 min-w-[520px] mt-1">
@@ -572,31 +588,38 @@ export default function App() {
 
       <div className="flex-1 min-h-0 flex flex-col gap-4">
         {/* Slim top strip — Source (scan config) and Destination (sample
-            config) side by side; the dest editor lives only here. The rail
-            toggle (right) collapses the destination rail so the Library can go
-            full-width. */}
+            config + mirror-tree controls) side by side; the dest editor lives
+            only here. The rail toggle (right) collapses the Nostr · Radio rail
+            so the Library can go full-width. */}
         <Section
           title="Source & destination"
           icon={<ArrowRightLeft size={16} />}
           right={
-            <button
-              type="button"
-              onClick={() => setRailExpanded(railOpen ? "0" : "1")}
-              aria-pressed={railOpen}
-              title={
-                railOpen
-                  ? "Hide the destination rail (Mirror · feed)"
-                  : "Show the destination rail (Mirror · feed)"
-              }
-              className={cn(
-                "p-1.5 rounded-md transition-colors",
-                railOpen
-                  ? "bg-surface text-accent"
-                  : "text-muted hover:text-fg hover:bg-surface/50",
-              )}
-            >
-              <PanelRight size={14} />
-            </button>
+            <div className="flex items-center gap-0.5 rounded-md bg-bg/40 p-0.5">
+              {(
+                [
+                  ["library", <PanelRightClose size={14} />, "Full Library"],
+                  ["split", <Columns2 size={14} />, "Library + Radio"],
+                  ["radio", <PanelLeftClose size={14} />, "Full Radio"],
+                ] as const
+              ).map(([key, icon, title]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setLayout(key)}
+                  aria-pressed={layout === key}
+                  title={title}
+                  className={cn(
+                    "p-1.5 rounded transition-colors",
+                    layout === key
+                      ? "bg-surface text-accent"
+                      : "text-muted hover:text-fg hover:bg-surface/40",
+                  )}
+                >
+                  {icon}
+                </button>
+              ))}
+            </div>
           }
         >
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -628,10 +651,15 @@ export default function App() {
                   )
                 }
                 onCancelSample={stopSample}
+                trailing={<MirrorControls mirror={mirror} dest={workspaceDest} />}
               />
             </div>
           </div>
         </Section>
+
+        {/* Orphan clips — full-width strip directly under Source & destination,
+            present only when there's something to clean. */}
+        <OrphanStrip mirror={mirror} />
 
         <OperationOutput
           scan={scanState}
@@ -641,59 +669,40 @@ export default function App() {
         />
 
         {/* Main row — the Library (source) is the dominant surface, full-width
-            when the rail is collapsed; the destination rail (Mirror orphans +
-            feed) sits beside it on demand. */}
+            when the rail is collapsed; the Nostr · Radio rail sits beside it on
+            demand. */}
         <div className="flex-1 min-h-0 flex gap-4">
-          {/* Merged Library Section — filter band + tree under one title.
-              Collapse hides the filter band and overlays sample="sampled". */}
+          {/* Library — filter band (incl. the all/has-clip/no-clip toggle) +
+              tree. The old library/samples toggle was dropped: it duplicated
+              the clip-exists filter (Samples == has-clip). Hidden in Full Radio. */}
+          {showLibrary && (
           <Section
-            title={libraryOpen ? "Library" : "Samples"}
+            title="Library"
             icon={<FolderTree size={16} />}
-            right={
-              <div className="inline-flex rounded-md overflow-hidden bg-surface text-[10px] font-mono uppercase tracking-wide">
-                {(
-                  [
-                    ["1", "library"],
-                    ["0", "samples"],
-                  ] as const
-                ).map(([v, label]) => (
-                  <button
-                    key={v}
-                    type="button"
-                    onClick={() => setLibraryExpanded(v)}
-                    aria-pressed={libraryExpanded === v}
-                    title={
-                      v === "1"
-                        ? "Show the whole library (all filters)"
-                        : "Show only tracks with a sample on disk"
-                    }
-                    className={cn(
-                      "px-2 py-1 transition-colors",
-                      libraryExpanded === v
-                        ? "bg-accent text-bg"
-                        : "text-muted hover:text-fg",
-                    )}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            }
             className="flex-1 min-w-0 min-h-0"
             contentClassName="flex-1 min-h-0 flex flex-col gap-3"
+            right={
+              report ? (
+                <span className="text-[11px] text-muted font-normal tabular-nums">
+                  {libraryStats.filtered ? (
+                    <>
+                      {libraryStats.artists}/{libraryStats.total.artists} artists ·{" "}
+                      {libraryStats.releases}/{libraryStats.total.releases} releases ·{" "}
+                      {libraryStats.tracks.toLocaleString()}/
+                      {libraryStats.total.tracks.toLocaleString()} tracks
+                    </>
+                  ) : (
+                    <>
+                      {libraryStats.artists.toLocaleString()} artists ·{" "}
+                      {libraryStats.releases.toLocaleString()} releases ·{" "}
+                      {libraryStats.tracks.toLocaleString()} tracks
+                    </>
+                  )}
+                </span>
+              ) : undefined
+            }
           >
-            {libraryOpen ? (
-              <Filters
-                filter={filter}
-                setFilter={setFilter}
-                counts={counts}
-                total={report?.rows.length ?? 0}
-              />
-            ) : (
-              <div className="text-xs text-muted">
-                Sampled tracks only — click the header to show all filters.
-              </div>
-            )}
+            <Filters filter={filter} setFilter={setFilter} />
             <LibraryTree
               rows={filteredRows}
               libRoot={libRoot}
@@ -709,18 +718,15 @@ export default function App() {
               onPublishSample={(row) => setPublishTarget(row)}
             />
           </Section>
+          )}
 
-          {railOpen && (
-            <div className="w-[340px] shrink-0 flex flex-col gap-4 min-h-0">
-              <WorkspacePanel
-                rows={filteredRows}
-                libRoot={libRoot}
-                anyFilter={anyFilter}
-                dest={workspaceDest}
-                sourceRels={sourceRels}
-                onStatus={setStatus}
-                onMirrorState={setMirrorState}
-              />
+          {showRail && (
+            <div
+              className={cn(
+                "flex flex-col gap-4 min-h-0",
+                railFull ? "flex-1 min-w-0" : "w-[340px] shrink-0",
+              )}
+            >
               <NostrPanel identity={identity} setIdentity={setIdentity} />
               <FeedPanel identity={identity} relays={relays} />
             </div>

@@ -1,4 +1,4 @@
-// Tauri commands for audio-flac-quality-check-tauri.
+// Tauri commands for ndisc.tree (binary: ndisc-tree).
 //
 // 1:1 port of the Python check_flac_quality.sh + flac_library_browser.py:
 //   - scan_library: walks <root>/**/*.flac, runs ffprobe + ffmpeg high-pass
@@ -46,6 +46,9 @@ const AUDIO_EXTS: &[&str] = &[
 const FFMPEG_TIMEOUT_SECS: u64 = 60;
 const FFPROBE_TIMEOUT_SECS: u64 = 15;
 const REPORT_FILENAME: &str = "last_scan.json";
+// Kept on the original name across the ndisc.tree rename ON PURPOSE: the
+// keychain service is a stable identity — renaming it would orphan the user's
+// already-stored Nostr nsec.
 const KEYRING_SERVICE_RELEASE: &str = "audio-flac-quality-check-tauri";
 const KEYRING_SERVICE_DEV: &str = "audio-flac-quality-check-tauri-dev";
 const KEYRING_USER: &str = "default";

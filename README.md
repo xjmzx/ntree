@@ -1,4 +1,6 @@
-# audio-flac-quality-check-tauri
+# ndisc.tree
+
+(binary `ndisc-tree`; formerly `audio-flac-quality-check-tauri` / `ndisc.blobtree`)
 
 Tauri 2 desktop port of [`audio-flac-quality-check`](https://github.com/xjmzx/audio-flac-quality-check).
 Same heuristic, same thresholds, same workflow — different stack so it
@@ -65,8 +67,8 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ## Quick start
 
 ```sh
-git clone https://github.com/xjmzx/audio-flac-quality-check-tauri.git
-cd audio-flac-quality-check-tauri
+git clone https://github.com/xjmzx/ndisc.tree.git
+cd ndisc.tree
 
 make deps      # npm install + cargo fetch
 make icons     # one-time: generate Tauri bundle icons from icon.svg
@@ -118,7 +120,7 @@ not next to the binary. The window restores the last scan on launch.
 ## Layout
 
 ```
-audio-flac-quality-check-tauri/
+ndisc.tree/
 ├── src/                              # React + TS frontend
 │   ├── App.tsx                       # main layout
 │   ├── components/                   # ScannerControls, Filters, LibraryTree,
@@ -131,7 +133,7 @@ audio-flac-quality-check-tauri/
 │   ├── Cargo.toml
 │   └── tauri.conf.json
 ├── icon.svg                          # suite-style 128px tile
-├── audio-flac-quality-check-tauri.desktop.in
+├── ndisc-tree.desktop.in
 └── Makefile
 ```
 
