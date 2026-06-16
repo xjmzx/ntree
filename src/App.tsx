@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { FolderTree, KeyRound, Lock, Radio } from "lucide-react";
+import { FolderTree, KeyRound, Lock, LogOut, Radio } from "lucide-react";
 import { getVersion } from "@tauri-apps/api/app";
 import { SimplePool } from "nostr-tools";
 import { cn } from "./lib/cn";
@@ -22,39 +22,26 @@ import {
   scanSampleDest,
   type SampleProgress,
   type ScanProgress,
-  type ScanReport,
   type ScanRow,
   type Verdict,
 } from "./lib/tauri";
-import { loadIdentity, shortNpub, type Identity } from "./lib/nostr";
+import {
+  clearIdentity,
+  loadIdentity,
+  shortNpub,
+  type Identity,
+} from "./lib/nostr";
 import { usePersistedString } from "./lib/usePersistedString";
+import { useLibrary } from "./lib/library";
 import { sampleDestPath, sourceSignature } from "./lib/paths";
 
 const SAMPLE_SECS = 10;
 const SAMPLE_START_OFFSET_SECS = 30;
 
-const DEFAULT_ROOT = "/data/music";
+// Theme is the one config scalar that stays in App — it's UI chrome, not
+// library data. Scanner root / workspace dest / relays moved to lib/library
+// (the report-DB + config store).
 const THEME_KEY = "afqc-tauri.theme";
-const SCANNER_ROOT_KEY = "afqc-tauri.scanner.root";
-// Single shared destination for processed outputs — the mirror tree
-// scaffolds it (mkdir + optional pkexec), Sampler writes 10s clips into
-// the same root, future panels (Opus transcode, waveform PNGs, …) can
-// join the same shared state. Key kept as `workspace.dest` so existing
-// persisted values carry over.
-const WORKSPACE_DEST_KEY = "afqc-tauri.workspace.dest";
-// Suite-aligned default relay set (matches smpl-tool). The full
-// editable + persisted list is a follow-up; for now this constant is
-// the single source of truth visible across FeedPanel + NostrPanel +
-// the footer indicator. Rust's REACTION_RELAYS still has its own copy
-// — wiring relays through publish_reaction/delete_reaction is part of
-// the same follow-up.
-// Relay set the app uses for both publishing kind:1063 and the read
-// surfaces (FeedPanel single-WS subscription, profile fetch). Composed
-// from one editable slot (default `wss://relay.fizx.uk`, persisted)
-// and two locked secondaries (matches the suite-wide trio).
-const DEFAULT_PUBLISH_RELAY = "wss://relay.fizx.uk";
-const PUBLISH_RELAY_KEY = "afqc-tauri.publish.relay";
-const SECONDARY_RELAYS = ["wss://nos.lol", "wss://relay.primal.net"];
 const PROFILE_RELAYS = ["wss://relay.fizx.uk"];
 type Theme = "fizx" | "upleb";
 
@@ -79,21 +66,18 @@ function loadTheme(): Theme {
 }
 
 export default function App() {
-  const [report, setReport] = useState<ScanReport | null>(null);
-  // Persists across launches; last-loaded report or last-picked dir wins.
-  const [root, setRoot] = usePersistedString(SCANNER_ROOT_KEY, DEFAULT_ROOT);
-  // Shared destination — see WORKSPACE_DEST_KEY comment.
-  const [workspaceDest, setWorkspaceDest] = usePersistedString(WORKSPACE_DEST_KEY, "");
-  // Editable first relay (publishRelay), joined with SECONDARY_RELAYS
-  // to form the effective trio used across the app.
-  const [publishRelay, setPublishRelay] = usePersistedString(
-    PUBLISH_RELAY_KEY,
-    DEFAULT_PUBLISH_RELAY,
-  );
-  const relays = useMemo(
-    () => [publishRelay.trim() || DEFAULT_PUBLISH_RELAY, ...SECONDARY_RELAYS],
-    [publishRelay],
-  );
+  // Report-DB + persisted config + derived selectors, consolidated in one
+  // store (lib/library). The load/scan/sample lifecycle stays here in App.
+  const {
+    report,
+    setReport,
+    root,
+    setRoot,
+    workspaceDest,
+    setWorkspaceDest,
+    relays,
+    libRoot,
+  } = useLibrary();
   const [filter, setFilter] = useState<FilterState>({
     verdict: "All",
     search: "",
@@ -244,6 +228,17 @@ export default function App() {
       .catch(() => setIdentity(null));
   }, []);
 
+  // Forget the nsec from the OS keychain — the header chip's action, replacing
+  // the old in-panel identity block (sign-in still lives in NostrPanel).
+  async function handleForgetIdentity() {
+    try {
+      await clearIdentity();
+    } catch {
+      /* even if the keychain delete fails, drop the in-memory identity */
+    }
+    setIdentity(null);
+  }
+
   // Best-effort profile fetch (kind:0 metadata) for display_name / name.
   // Mirrors ndisc's pattern. Silent on failure — npub stays as-is if the
   // relay has no metadata for this pubkey.
@@ -312,7 +307,6 @@ export default function App() {
       setStatus({ text: "no tracks to sample", tone: "warn" });
       return;
     }
-    const libRoot = report?.root ?? root;
     const items = tracks.map((t) => ({
       src: t.path,
       dest: sampleDestPath(t.path, libRoot, dest, SAMPLE_SECS),
@@ -380,7 +374,13 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  const libRoot = report?.root ?? root;
+  // Lowercased paths, computed once per report rather than on every search
+  // keystroke — the per-row toLowerCase() over ~18k rows was a big slice of
+  // the filter cost.
+  const lowerPaths = useMemo(
+    () => report?.rows.map((r) => r.path.toLowerCase()) ?? [],
+    [report],
+  );
 
   const filteredRows: ScanRow[] = useMemo(() => {
     if (!report) return [];
@@ -390,9 +390,9 @@ export default function App() {
     // — restored on expand. Other filter dimensions (verdict, search)
     // continue to apply.
     const effectiveSample = libraryOpen ? filter.sample : "sampled";
-    return report.rows.filter((r) => {
+    return report.rows.filter((r, i) => {
       if (filter.verdict !== "All" && r.verdict !== filter.verdict) return false;
-      if (q && !r.path.toLowerCase().includes(q)) return false;
+      if (q && !lowerPaths[i].includes(q)) return false;
       if (effectiveSample !== "all") {
         const has = sampledSignatures.has(sourceSignature(r.path, libRoot));
         if (effectiveSample === "sampled" && !has) return false;
@@ -400,7 +400,7 @@ export default function App() {
       }
       return true;
     });
-  }, [report, filter, sampledSignatures, libRoot, libraryOpen]);
+  }, [report, filter, sampledSignatures, libRoot, libraryOpen, lowerPaths]);
 
   const counts = useMemo(() => {
     const c: Record<Verdict, number> = {
@@ -501,7 +501,21 @@ export default function App() {
         {/* Right grid slot — surfaces the current status as a tinted chip
             (muted / warn / ok / alert). Balances the 1fr title column so
             the middle module remains centered. */}
-        <div className="hidden md:flex items-center justify-end mt-1">
+        <div className="hidden md:flex items-center justify-end gap-2 mt-1">
+          {/* Forget-identity chip — only when signed in (the ndisc/smpl
+              pattern). Sign-in itself lives in the NostrPanel. */}
+          {identity && (
+            <button
+              type="button"
+              onClick={handleForgetIdentity}
+              title="Signed in — click to forget the nsec from the OS keychain"
+              aria-label="Forget identity"
+              className="px-2 py-1 rounded-md bg-mauve text-bg hover:bg-mauve/80
+                         inline-flex items-center text-xs font-mono cursor-pointer shrink-0"
+            >
+              <LogOut size={12} />
+            </button>
+          )}
           <span
             className={cn(
               "text-xs font-mono px-2.5 py-1 rounded-md truncate max-w-[420px]",
@@ -604,13 +618,7 @@ export default function App() {
 
         {/* Right column: Publish above Published-feed */}
         <div className="flex flex-col gap-4 min-h-0 overflow-auto">
-          <NostrPanel
-            identity={identity}
-            setIdentity={setIdentity}
-            publishRelay={publishRelay}
-            setPublishRelay={setPublishRelay}
-            defaultPublishRelay={DEFAULT_PUBLISH_RELAY}
-          />
+          <NostrPanel identity={identity} setIdentity={setIdentity} />
           <FeedPanel identity={identity} relays={relays} />
         </div>
       </div>
