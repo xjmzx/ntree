@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  AlertTriangle,
   ArrowRightLeft,
+  Check,
   FolderTree,
   KeyRound,
   Lock,
@@ -467,15 +469,39 @@ export default function App() {
             <span className="text-fg">disc</span>
             <span className="text-mauve">.blobtree</span>
           </button>
-          {appVersion && (
-            <span
-              className="hidden md:inline-flex items-center px-2.5 py-2
-                         rounded-md bg-surface text-mauve font-mono text-xs
-                         shrink-0"
-            >
-              v{appVersion}
-            </span>
-          )}
+          {appVersion &&
+            (() => {
+              // The version chip doubles as the status surface: at rest it's
+              // just the version; when there's something to say ("not ready")
+              // it extends to a tinted status with the version dimmed beside it.
+              const idle = status.text === "ready";
+              const icon =
+                status.tone === "ok" ? (
+                  <Check size={12} />
+                ) : status.tone === "warn" || status.tone === "alert" ? (
+                  <AlertTriangle size={12} />
+                ) : null;
+              return (
+                <span
+                  className={cn(
+                    "hidden md:inline-flex items-center gap-1.5 px-2.5 py-2",
+                    "rounded-md font-mono text-xs shrink-0 max-w-[28rem]",
+                    idle ? "bg-surface text-mauve" : TONE_CHIP[status.tone],
+                  )}
+                  title={idle ? `v${appVersion}` : status.text}
+                >
+                  {!idle && (
+                    <>
+                      {icon}
+                      <span className="truncate">{status.text}</span>
+                    </>
+                  )}
+                  <span className={idle ? undefined : "text-fg/40 shrink-0"}>
+                    v{appVersion}
+                  </span>
+                </span>
+              );
+            })()}
         </div>
         {/*
           Last-scan module: date + file count + 4-segment proportional bar
@@ -523,9 +549,9 @@ export default function App() {
             })()}
           </div>
         )}
-        {/* Right grid slot — surfaces the current status as a tinted chip
-            (muted / warn / ok / alert). Balances the 1fr title column so
-            the middle module remains centered. */}
+        {/* Right grid slot — forget-identity button (status now lives in the
+            version chip, top-left). Balances the 1fr title column so the
+            middle module stays centered. */}
         <div className="hidden md:flex items-center justify-end gap-2 mt-1">
           {/* Forget-identity chip — only when signed in (the ndisc/smpl
               pattern). Sign-in itself lives in the NostrPanel. */}
@@ -535,21 +561,12 @@ export default function App() {
               onClick={handleForgetIdentity}
               title="Signed in — click to forget the nsec from the OS keychain"
               aria-label="Forget identity"
-              className="px-2 py-1 rounded-md bg-mauve text-bg hover:bg-mauve/80
-                         inline-flex items-center text-xs font-mono cursor-pointer shrink-0"
+              className="p-2 rounded-md bg-mauve text-bg hover:bg-mauve/80
+                         inline-flex items-center transition-colors cursor-pointer shrink-0"
             >
-              <LogOut size={12} />
+              <LogOut size={14} />
             </button>
           )}
-          <span
-            className={cn(
-              "text-xs font-mono px-2.5 py-1 rounded-md truncate max-w-[420px]",
-              TONE_CHIP[status.tone],
-            )}
-            title={status.text}
-          >
-            {status.text}
-          </span>
         </div>
       </header>
 
@@ -632,7 +649,36 @@ export default function App() {
           <Section
             title={libraryOpen ? "Library" : "Samples"}
             icon={<FolderTree size={16} />}
-            onTitleClick={() => setLibraryExpanded(libraryOpen ? "0" : "1")}
+            right={
+              <div className="inline-flex rounded-md overflow-hidden bg-surface text-[10px] font-mono uppercase tracking-wide">
+                {(
+                  [
+                    ["1", "library"],
+                    ["0", "samples"],
+                  ] as const
+                ).map(([v, label]) => (
+                  <button
+                    key={v}
+                    type="button"
+                    onClick={() => setLibraryExpanded(v)}
+                    aria-pressed={libraryExpanded === v}
+                    title={
+                      v === "1"
+                        ? "Show the whole library (all filters)"
+                        : "Show only tracks with a sample on disk"
+                    }
+                    className={cn(
+                      "px-2 py-1 transition-colors",
+                      libraryExpanded === v
+                        ? "bg-accent text-bg"
+                        : "text-muted hover:text-fg",
+                    )}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            }
             className="flex-1 min-w-0 min-h-0"
             contentClassName="flex-1 min-h-0 flex flex-col gap-3"
           >
@@ -665,7 +711,7 @@ export default function App() {
           </Section>
 
           {railOpen && (
-            <div className="w-[340px] shrink-0 flex flex-col gap-4 min-h-0 overflow-auto">
+            <div className="w-[340px] shrink-0 flex flex-col gap-4 min-h-0">
               <WorkspacePanel
                 rows={filteredRows}
                 libRoot={libRoot}

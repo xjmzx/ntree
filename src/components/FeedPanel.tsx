@@ -261,7 +261,12 @@ export function FeedPanel({ identity, relays }: FeedPanelProps) {
   const reactions = useReactions(reactionRefs, identity?.pk ?? null, KIND);
 
   return (
-    <Section icon={<Headphones size={16} aria-label="Published" />}>
+    <Section
+      title="Radio"
+      icon={<Headphones size={16} aria-label="Radio — published samples on the wire" />}
+      className="flex-1 min-h-0"
+      contentClassName="flex-1 min-h-0 flex flex-col gap-2"
+    >
       <div className="flex items-center gap-2 text-xs">
         <span
           className={cn(
@@ -332,7 +337,7 @@ export function FeedPanel({ identity, relays }: FeedPanelProps) {
         <p className="text-xs text-alert font-mono break-all">{errMsg}</p>
       )}
 
-      <ul className="max-h-72 overflow-auto rounded-md bg-bg/40 divide-y divide-surface/30">
+      <ul className="flex-1 min-h-0 overflow-auto rounded-md bg-bg/40 divide-y divide-surface/30">
         {visible.length === 0 && (
           <li className="px-3 py-6 text-xs text-muted text-center">
             {status === "ready"

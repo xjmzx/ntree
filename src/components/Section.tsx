@@ -1,4 +1,5 @@
 import { ReactNode } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "../lib/cn";
 
 interface SectionProps {
@@ -60,6 +61,11 @@ export function Section({
             "cursor-pointer hover:opacity-70 transition-opacity select-none",
         )}
       >
+        {onTitleClick && (
+          <span className="text-muted shrink-0" aria-hidden="true">
+            {hasBody ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          </span>
+        )}
         {icon}
         {title && (
           <h2 className="text-sm tracking-wide uppercase">{title}</h2>

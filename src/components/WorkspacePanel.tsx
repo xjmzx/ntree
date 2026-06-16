@@ -61,7 +61,9 @@ export function WorkspacePanel({
   onStatus,
   onMirrorState,
 }: WorkspacePanelProps) {
-  const [expanded, setExpanded] = usePersistedBool(EXPANDED_KEY, true);
+  // Default collapsed — orphan cleanup is occasional; collapsed it's a compact
+  // strip so the rail's Radio (feed) gets the room.
+  const [expanded, setExpanded] = usePersistedBool(EXPANDED_KEY, false);
   const [sudo, setSudo] = useState(false);
   const [state, setState] = useState<State>({ kind: "idle" });
 
