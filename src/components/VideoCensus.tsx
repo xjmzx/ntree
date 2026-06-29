@@ -14,6 +14,12 @@ import {
 } from "../lib/tauri";
 
 const BACKUP_KEY = "afqc-tauri.video.backup";
+const NEEDS_WORK: VideoBucket[] = ["remux", "audioFix", "transcode"];
+
+/** Suggested backup folder: a sibling of the library root, outside it —
+ *  /data/music → /data/music_mv_backups, /home/john/Music → …/Music_mv_backups. */
+const defaultBackup = (root: string) =>
+  root ? root.replace(/\/+$/, "") + "_mv_backups" : "";
 
 // Part A of the Normalize-videos plan: a read-only census of the library's
 // video files, bucketed by what they'd need to become playable mp4 (h264/aac
@@ -105,6 +111,24 @@ export function VideoCensus({ root }: { root: string }) {
   useEffect(() => {
     localStorage.setItem(BACKUP_KEY, backupRoot);
   }, [backupRoot]);
+  // Suggest the sibling backup folder once the root is known, if unset.
+  useEffect(() => {
+    if (!backupRoot && root) setBackupRoot(defaultBackup(root));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [root]);
+
+  // Which needs-work buckets to convert — narrow the scope (e.g. remux only).
+  const [selected, setSelected] = useState<Set<VideoBucket>>(
+    () => new Set(NEEDS_WORK),
+  );
+  function toggleBucket(b: VideoBucket) {
+    setSelected((s) => {
+      const n = new Set(s);
+      if (n.has(b)) n.delete(b);
+      else n.add(b);
+      return n;
+    });
+  }
 
   const [phase, setPhase] = useState<"idle" | "confirm" | "running" | "done">(
     "idle",
@@ -112,18 +136,13 @@ export function VideoCensus({ root }: { root: string }) {
   const [progress, setProgress] = useState<NormalizeProgress | null>(null);
   const [report, setReport] = useState<NormalizeReport | null>(null);
 
-  // The files that need work — everything but plays-as-is / unknown.
+  // The files to convert — needs-work buckets, narrowed to the selected scope.
   const workItems = useMemo(
     () =>
       (rows ?? [])
-        .filter(
-          (r) =>
-            r.bucket === "remux" ||
-            r.bucket === "audioFix" ||
-            r.bucket === "transcode",
-        )
+        .filter((r) => NEEDS_WORK.includes(r.bucket) && selected.has(r.bucket))
         .map((r) => ({ path: r.path, bucket: r.bucket })),
-    [rows],
+    [rows, selected],
   );
 
   useEffect(() => {
@@ -329,33 +348,65 @@ export function VideoCensus({ root }: { root: string }) {
           </>
         ) : (
           <>
-            <span className="text-muted shrink-0">Backup originals to:</span>
-            <button
-              type="button"
-              onClick={pickBackup}
-              title="Choose where originals are moved (outside the library root)"
-              className="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-surface/60 hover:bg-surface text-fg/80 min-w-0"
-            >
-              <FolderOpen size={12} className="shrink-0" />
-              <span className="truncate max-w-[300px]">
-                {backupRoot || "choose a folder…"}
-              </span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setPhase("confirm")}
-              disabled={workItems.length === 0 || !backupRoot}
-              title={
-                workItems.length === 0
-                  ? "Nothing to normalize"
-                  : !backupRoot
-                    ? "Choose a backup folder first"
-                    : `Convert ${workItems.length} videos to playable mp4`
-              }
-              className="ml-auto inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-digital/20 text-digital hover:bg-digital/30 disabled:opacity-40 transition-colors shrink-0"
-            >
-              <Wand2 size={12} /> Normalize {workItems.length}
-            </button>
+            {/* Scope — toggle which needs-work buckets to convert. */}
+            <span className="text-muted shrink-0">convert:</span>
+            <div className="flex items-center gap-1.5 min-w-0">
+              {NEEDS_WORK.filter((b) => counts[b] > 0).map((b) => {
+                const on = selected.has(b);
+                return (
+                  <button
+                    key={b}
+                    type="button"
+                    onClick={() => toggleBucket(b)}
+                    title={`${BUCKET[b].note}${on ? "" : " — excluded"}`}
+                    aria-pressed={on}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 px-2 py-1 rounded-md transition-colors",
+                      on ? "bg-surface text-fg/90" : "bg-surface/40 text-muted/50",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "w-2 h-2 rounded-full",
+                        on ? BUCKET[b].dot : "bg-muted/40",
+                      )}
+                    />
+                    {counts[b]} {BUCKET[b].label}
+                  </button>
+                );
+              })}
+              {NEEDS_WORK.every((b) => counts[b] === 0) && (
+                <span className="text-muted/60">nothing needs converting</span>
+              )}
+            </div>
+            <div className="ml-auto flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={pickBackup}
+                title="Where originals are moved (must be outside the library root)"
+                className="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-surface/60 hover:bg-surface text-fg/80 min-w-0"
+              >
+                <FolderOpen size={12} className="shrink-0" />
+                <span className="truncate max-w-[260px]">
+                  {backupRoot || "choose backup folder…"}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setPhase("confirm")}
+                disabled={workItems.length === 0 || !backupRoot}
+                title={
+                  workItems.length === 0
+                    ? "Select at least one bucket to convert"
+                    : !backupRoot
+                      ? "Choose a backup folder first"
+                      : `Convert ${workItems.length} videos to playable mp4`
+                }
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-digital/20 text-digital hover:bg-digital/30 disabled:opacity-40 transition-colors"
+              >
+                <Wand2 size={12} /> Normalize {workItems.length}
+              </button>
+            </div>
           </>
         )}
       </div>
