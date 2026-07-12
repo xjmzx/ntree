@@ -322,30 +322,45 @@ export function VideoCensus({ root }: { root: string }) {
             </div>
           </>
         ) : phase === "done" && report ? (
-          <>
-            <span className="text-fg/80">
-              <span className="text-ok">✓ {report.converted} converted</span>
-              {report.failed > 0 && (
-                <span className="text-alert"> · {report.failed} failed</span>
-              )}
-              {report.timedOut > 0 && (
-                <span className="text-alert"> · {report.timedOut} timed out</span>
-              )}
-              {report.cancelled > 0 && (
-                <span className="text-muted"> · {report.cancelled} cancelled</span>
-              )}
-            </span>
-            <button
-              type="button"
-              onClick={() => {
-                setPhase("idle");
-                setReport(null);
-              }}
-              className="ml-auto px-2 py-1 rounded text-muted hover:text-fg shrink-0"
-            >
-              Dismiss
-            </button>
-          </>
+          <div className="flex flex-col gap-1 min-w-0 w-full">
+            <div className="flex items-center gap-3">
+              <span className="text-fg/80">
+                <span className="text-ok">✓ {report.converted} converted</span>
+                {report.failed > 0 && (
+                  <span className="text-alert"> · {report.failed} failed</span>
+                )}
+                {report.timedOut > 0 && (
+                  <span className="text-alert"> · {report.timedOut} timed out</span>
+                )}
+                {report.cancelled > 0 && (
+                  <span className="text-muted"> · {report.cancelled} cancelled</span>
+                )}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setPhase("idle");
+                  setReport(null);
+                }}
+                className="ml-auto px-2 py-1 rounded text-muted hover:text-fg shrink-0"
+              >
+                Dismiss
+              </button>
+            </div>
+            {/* WHY it failed. A bare "3 failed" is the least useful thing a
+                batch op can say — a permissions problem and a corrupt file look
+                identical. The backend now returns a reason per file; show it. */}
+            {report.errors.length > 0 && (
+              <ul className="max-h-24 overflow-y-auto text-[11px] text-alert
+                             font-mono space-y-0.5 pr-2">
+                {report.errors.map((e) => (
+                  <li key={e} className="break-all">
+                    {e}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         ) : (
           <>
             {/* Scope — toggle which needs-work buckets to convert. */}

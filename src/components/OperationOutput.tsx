@@ -37,12 +37,14 @@ function ProgressStrip({
 }) {
   return (
     <div className="space-y-1.5">
-      <div className="text-xs text-muted font-mono flex items-center gap-2 min-w-0">
+      {/* The streaming line is the one thing here you actually read while an op
+          runs — muted is the label tone, too dim for live output. */}
+      <div className="text-xs text-fg/75 font-mono flex items-center gap-2 min-w-0">
         <span className="text-accent uppercase tracking-wide text-[10px] shrink-0">
           {label}
         </span>
         <span className="truncate flex-1 min-w-0">{line}</span>
-        <span className="tabular-nums text-fg/80 shrink-0">{pct}%</span>
+        <span className="tabular-nums text-fg shrink-0">{pct}%</span>
       </div>
       <div className="h-px bg-muted/40" />
       <div className="h-0.5 rounded-full bg-bg/60 overflow-hidden">
@@ -90,7 +92,7 @@ export function OperationOutput({
   }
   if (mirror.kind === "running") {
     return (
-      <div className="rounded-lg bg-panel/40 border border-surface/40 px-4 py-2 text-xs text-muted font-mono">
+      <div className="rounded-lg bg-panel/40 border border-surface/40 px-4 py-2 text-xs text-fg/75 font-mono">
         <span className="text-accent uppercase tracking-wide text-[10px] mr-2">
           mirror
         </span>

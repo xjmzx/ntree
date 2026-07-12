@@ -811,23 +811,35 @@ fn ffmpeg_args_for(bucket: &str) -> Option<&'static [&'static str]> {
     }
 }
 
-fn normalize_one(item: &NormalizeItem, root: &Path, backup_root: &Path) -> NormalizeOutcome {
+/// Convert one video. Returns the outcome plus, on failure, WHY.
+///
+/// The reason matters: a permission problem and a corrupt file both used to
+/// surface as a bare "failed", which is the least useful thing a batch op can
+/// say. (This bit for real — the default backup path sat under a root-owned
+/// /data, so every file converted fine and then failed at the backup step, with
+/// nothing on screen to say so.)
+fn normalize_one(
+    item: &NormalizeItem,
+    root: &Path,
+    backup_root: &Path,
+) -> (NormalizeOutcome, Option<String>) {
+    let fail = |msg: String| (NormalizeOutcome::Failed, Some(msg));
     let src = Path::new(&item.path);
     if !src.is_file() {
-        return NormalizeOutcome::Failed;
+        return fail("file is gone from disk".into());
     }
     let Some(args) = ffmpeg_args_for(&item.bucket) else {
-        return NormalizeOutcome::Skipped; // plays / unknown — shouldn't be sent
+        return (NormalizeOutcome::Skipped, None); // plays / unknown — shouldn't be sent
     };
     let (Some(dir), Some(stem)) = (src.parent(), src.file_stem().and_then(|s| s.to_str()))
     else {
-        return NormalizeOutcome::Failed;
+        return fail("cannot read the file's folder or name".into());
     };
     let out = dir.join(format!("{stem}.mp4"));
     // Don't clobber an unrelated existing stem.mp4 (when converting e.g. a .mpg
     // and a .mp4 of the same name already sits beside it).
     if out.exists() && out != src {
-        return NormalizeOutcome::Failed;
+        return fail(format!("{stem}.mp4 already exists beside it — refusing to overwrite"));
     }
 
     let tmp = dir.join(format!(".ndisc-normalize-{stem}.mp4"));
@@ -846,34 +858,47 @@ fn normalize_one(item: &NormalizeItem, root: &Path, backup_root: &Path) -> Norma
             let rel = src.strip_prefix(root).unwrap_or(src);
             let backup_dest = backup_root.join(rel);
             if let Some(p) = backup_dest.parent() {
-                if fs::create_dir_all(p).is_err() {
+                if let Err(e) = fs::create_dir_all(p) {
                     let _ = fs::remove_file(&tmp);
-                    return NormalizeOutcome::Failed;
+                    return fail(format!(
+                        "cannot create the backup folder {} — {e}",
+                        p.display()
+                    ));
                 }
             }
-            if move_file(src, &backup_dest).is_err() {
+            if let Err(e) = move_file(src, &backup_dest) {
                 let _ = fs::remove_file(&tmp);
-                return NormalizeOutcome::Failed;
+                return fail(format!("cannot move the original into the backup — {e}"));
             }
-            if move_file(&tmp, &out).is_err() {
+            if let Err(e) = move_file(&tmp, &out) {
                 // Restore the original so we never lose the file.
                 let _ = move_file(&backup_dest, src);
                 let _ = fs::remove_file(&tmp);
-                return NormalizeOutcome::Failed;
+                return fail(format!("converted, but could not put the new mp4 in place — {e} (original restored)"));
             }
-            NormalizeOutcome::Converted
+            (NormalizeOutcome::Converted, None)
         }
-        RunOutcome::Ok(_) => {
+        RunOutcome::Ok(o) => {
             let _ = fs::remove_file(&tmp);
-            NormalizeOutcome::Failed
+            // ffmpeg says why on stderr; the last line is almost always the
+            // actual complaint.
+            let err = String::from_utf8_lossy(&o.stderr);
+            let last = err
+                .lines()
+                .rev()
+                .find(|l| !l.trim().is_empty())
+                .unwrap_or("ffmpeg failed")
+                .trim()
+                .to_string();
+            fail(format!("ffmpeg: {last}"))
         }
         RunOutcome::TimedOut => {
             let _ = fs::remove_file(&tmp);
-            NormalizeOutcome::TimedOut
+            (NormalizeOutcome::TimedOut, None)
         }
         RunOutcome::Failed => {
             let _ = fs::remove_file(&tmp);
-            NormalizeOutcome::Failed
+            fail("could not run ffmpeg — is it installed and on PATH?".into())
         }
     }
 }
@@ -934,11 +959,15 @@ fn normalize_inner(
     // Sequential: transcodes are CPU-heavy and libx264 already multi-threads,
     // so one ffmpeg at a time avoids thrashing and keeps progress legible.
     for (i, item) in items.iter().enumerate() {
-        let outcome = if cancel.load(Ordering::Relaxed) {
-            NormalizeOutcome::Cancelled
+        let (outcome, reason) = if cancel.load(Ordering::Relaxed) {
+            (NormalizeOutcome::Cancelled, None)
         } else {
             normalize_one(item, &root, &backup_root)
         };
+        let name = Path::new(&item.path)
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .unwrap_or_else(|| item.path.clone());
         match outcome {
             NormalizeOutcome::Converted => report.converted += 1,
             NormalizeOutcome::Skipped => report.skipped += 1,
@@ -946,13 +975,16 @@ fn normalize_inner(
             NormalizeOutcome::Failed => {
                 report.failed += 1;
                 if report.errors.len() < ERROR_SAMPLE {
-                    report.errors.push(item.path.clone());
+                    report.errors.push(match reason {
+                        Some(r) => format!("{name} — {r}"),
+                        None => name.clone(),
+                    });
                 }
             }
             NormalizeOutcome::TimedOut => {
                 report.timed_out += 1;
                 if report.errors.len() < ERROR_SAMPLE {
-                    report.errors.push(format!("{} (timed out)", item.path));
+                    report.errors.push(format!("{name} — timed out"));
                 }
             }
         }
