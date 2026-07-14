@@ -67,7 +67,8 @@ const SAMPLE_START_OFFSET_SECS = 30;
 // (the report-DB + config store).
 const THEME_KEY = "afqc-tauri.theme";
 const PROFILE_RELAYS = ["wss://relay.fizx.uk"];
-type Theme = "fizx" | "upleb";
+/** Monochrome is the default: chrome greyscale, meaning keeps its colour. */
+type Theme = "fizx" | "upleb" | "mono";
 
 // Header status chip — tone-tinted background + text per tone.
 // Enumerated literal classes so Tailwind JIT sees them at build time.
@@ -86,7 +87,9 @@ interface ProfileMeta {
 
 function loadTheme(): Theme {
   const v = localStorage.getItem(THEME_KEY);
-  return v === "upleb" ? "upleb" : "fizx";
+  // Default = mono. An existing choice is respected; only a fresh install lands
+  // here.
+  return v === "upleb" || v === "fizx" ? v : "mono";
 }
 
 export default function App() {
@@ -339,7 +342,9 @@ export default function App() {
 
   // Apply + persist theme.
   useEffect(() => {
-    document.documentElement.classList.toggle("theme-upleb", theme === "upleb");
+    const root = document.documentElement.classList;
+    root.toggle("theme-upleb", theme === "upleb");
+    root.toggle("theme-mono", theme === "mono");
     localStorage.setItem(THEME_KEY, theme);
   }, [theme]);
 
@@ -646,7 +651,7 @@ export default function App() {
         <div className="flex items-center gap-3 shrink-0">
           <button
             type="button"
-            onClick={() => setTheme((t) => (t === "fizx" ? "upleb" : "fizx"))}
+            onClick={() => setTheme((t) => (t === "fizx" ? "upleb" : t === "upleb" ? "mono" : "fizx"))}
             title={
               theme === "fizx"
                 ? "Theme: fizx.uk — click to switch to upleb.uk"

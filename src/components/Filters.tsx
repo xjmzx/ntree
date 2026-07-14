@@ -165,7 +165,7 @@ export function Filters({ filter, setFilter, manifestCount }: FiltersProps) {
           className={`flex items-center gap-1.5 h-9 px-2.5 rounded-md text-xs
                       transition-colors ${
                         filter.released === "released"
-                          ? "bg-mauve/20 text-mauve"
+                          ? "bg-nostr/20 text-nostr"
                           : "bg-surface hover:bg-surfaceHover text-muted"
                       }`}
         >

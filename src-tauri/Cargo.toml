@@ -1,6 +1,6 @@
 [package]
 name = "ndisc-tree"
-version = "0.2.12"
+version = "0.3.0"
 description = "FLAC library quality scanner — spectral high-frequency analysis to flag lossy-source files"
 authors = ["xjmzx"]
 edition = "2021"

@@ -24,6 +24,8 @@ export default {
         warn: c("--c-warn"),
         alert: c("--c-alert"),
         mauve: c("--c-mauve"),
+        lossy: c("--c-lossy"),
+        nostr: c("--c-nostr"),
         auburn: c("--c-auburn"),
       },
       fontFamily: {

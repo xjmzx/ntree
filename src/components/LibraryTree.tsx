@@ -17,7 +17,7 @@ const VERDICT_COLOR: Record<Verdict, string> = {
   LOSSLESS: "text-ok",
   "PROBABLY-LOSSY": "text-alert",
   UNCERTAIN: "text-warn",
-  LOSSY: "text-mauve",
+  LOSSY: "text-lossy",
   UNKNOWN: "text-muted",
 };
 
@@ -122,7 +122,7 @@ function scopeStatus(
   const sampled = tracks.filter(hasSample).length;
   const published = tracks.filter(isPublished).length;
   const dot =
-    published > 0 ? "bg-mauve" : sampled > 0 ? "bg-ok" : "bg-muted/40";
+    published > 0 ? "bg-nostr" : sampled > 0 ? "bg-ok" : "bg-muted/40";
   return { sampled, published, dot };
 }
 

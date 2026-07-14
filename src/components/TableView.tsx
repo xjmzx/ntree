@@ -12,7 +12,7 @@ const VERDICT_TEXT: Record<Verdict, string> = {
   LOSSLESS: "text-ok",
   "PROBABLY-LOSSY": "text-alert",
   UNCERTAIN: "text-warn",
-  LOSSY: "text-mauve",
+  LOSSY: "text-lossy",
   UNKNOWN: "text-muted",
 };
 

@@ -10,7 +10,7 @@ const VERDICT_META: { key: Verdict; label: string; bar: string; text: string }[]
   { key: "LOSSLESS", label: "Lossless", bar: "bg-ok", text: "text-ok" },
   { key: "PROBABLY-LOSSY", label: "Probably lossy", bar: "bg-alert", text: "text-alert" },
   { key: "UNCERTAIN", label: "Uncertain", bar: "bg-warn", text: "text-warn" },
-  { key: "LOSSY", label: "Lossy", bar: "bg-mauve", text: "text-mauve" },
+  { key: "LOSSY", label: "Lossy", bar: "bg-lossy", text: "text-lossy" },
   { key: "UNKNOWN", label: "Unknown", bar: "bg-muted", text: "text-muted" },
 ];
 
@@ -112,7 +112,7 @@ export function StatsView({ counts, rows }: StatsViewProps) {
             {/* Headline rollup — lossless vs lossy vs uncertain. */}
             <div className="grid grid-cols-3 gap-3">
               <Headline label="Lossless" n={lossless} pct={fmtPct(lossless)} cls="text-ok" />
-              <Headline label="Lossy" n={lossy} pct={fmtPct(lossy)} cls="text-mauve" />
+              <Headline label="Lossy" n={lossy} pct={fmtPct(lossy)} cls="text-lossy" />
               <Headline label="Uncertain" n={unsure} pct={fmtPct(unsure)} cls="text-warn" />
             </div>
 
