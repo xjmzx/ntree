@@ -436,3 +436,26 @@ export async function deleteReaction(
 ): Promise<ReactionResult> {
   return invoke<ReactionResult>("delete_reaction", { reactionEventId });
 }
+
+/** A release ndisc has published to Nostr (from the suite-shared manifest). */
+export interface ManifestRelease {
+  id: number;
+  artist: string;
+  title: string;
+  /** Absolute path of the release folder on disk. */
+  dir: string;
+}
+
+export interface PublishedManifest {
+  version: number;
+  generatedAt: number;
+  libraryRoot: string | null;
+  releases: ManifestRelease[];
+}
+
+/** ndisc's published-release manifest, or null if it has never been exported.
+ *  Null is a normal state, not an error — the user just hasn't run
+ *  "Export published manifest" in ndisc yet. */
+export async function loadPublishedManifest(): Promise<PublishedManifest | null> {
+  return invoke("load_published_manifest");
+}

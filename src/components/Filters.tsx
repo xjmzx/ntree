@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, Search } from "lucide-react";
+import { ChevronDown, Search, Radio } from "lucide-react";
 import { VERDICTS, type Verdict } from "../lib/tauri";
 
 export type SampleFilter = "all" | "sampled" | "unsampled";
@@ -12,18 +12,30 @@ export interface FilterState {
    * dest. Set to `"all"` to ignore. App-level `hasSample` decides per row.
    */
   sample: SampleFilter;
+  /**
+   * Narrow to tracks inside releases ndisc has published to Nostr. Read from
+   * the suite-shared manifest ndisc exports — ntree has no idea what is
+   * published on its own. `"all"` ignores it; unavailable when no manifest has
+   * been exported.
+   */
+  published: PublishedFilter;
 }
+
+export type PublishedFilter = "all" | "published";
 
 interface FiltersProps {
   filter: FilterState;
   setFilter: (f: FilterState) => void;
+  /** How many releases ndisc has published (from its manifest); null when no
+   *  manifest has been exported, in which case the filter is not offered. */
+  manifestCount: number | null;
 }
 
 /**
  * Bare filter controls — no Section wrapper of its own; the parent
  * Library Section embeds these as a header band.
  */
-export function Filters({ filter, setFilter }: FiltersProps) {
+export function Filters({ filter, setFilter, manifestCount }: FiltersProps) {
   const searchRef = useRef<HTMLInputElement>(null);
 
   // Local search text so typing is instant; the expensive committed filter
@@ -120,6 +132,38 @@ export function Filters({ filter, setFilter }: FiltersProps) {
           </button>
         );
       })()}
+
+      {/* ndisc-published filter. Only rendered when a manifest exists — with no
+          manifest the filter cannot mean anything, and a dead control that
+          silently matches nothing is worse than no control. Mauve = the
+          suite-wide "published to Nostr" colour. */}
+      {manifestCount != null && (
+        <button
+          type="button"
+          onClick={() =>
+            setFilter({
+              ...filter,
+              published: filter.published === "all" ? "published" : "all",
+            })
+          }
+          aria-pressed={filter.published === "published"}
+          aria-label="ndisc-published filter"
+          title={
+            filter.published === "published"
+              ? `Showing only tracks in the ${manifestCount.toLocaleString()} releases ndisc has published to Nostr. Click to clear.`
+              : `Show only tracks inside the ${manifestCount.toLocaleString()} releases ndisc has published to Nostr.`
+          }
+          className={`flex items-center gap-1.5 h-9 px-2.5 rounded-md text-xs
+                      transition-colors ${
+                        filter.published === "published"
+                          ? "bg-mauve/20 text-mauve"
+                          : "bg-surface hover:bg-surfaceHover text-muted"
+                      }`}
+        >
+          <Radio size={13} />
+          published
+        </button>
+      )}
 
       <div className="flex-1 min-w-[200px] relative">
         <Search

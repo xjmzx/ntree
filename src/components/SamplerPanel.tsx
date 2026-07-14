@@ -11,6 +11,10 @@ const EXPANDED_KEY = "afqc-tauri.destination.expanded";
 
 interface SamplerPanelProps {
   rows: ScanRow[];
+  /** How many of `rows` have no clip yet — i.e. the work this run would
+   *  actually do. Sampling is idempotent (existing clips are skipped), so the
+   *  scope size alone overstates it, sometimes wildly. */
+  pending: number;
   /** Shared workspace destination — also set by WorkspacePanel. */
   dest: string;
   setDest: (v: string) => void;
@@ -28,6 +32,7 @@ interface SamplerPanelProps {
 
 export function SamplerPanel({
   rows,
+  pending,
   dest,
   setDest,
   sampling,
@@ -40,7 +45,11 @@ export function SamplerPanel({
   const open = bare || expanded;
   const running = sampling !== null;
   const count = rows.length;
-  const canRun = !running && count > 0 && dest.trim() !== "";
+  const done = count - pending;
+  // Nothing to do is a real state, not an error — with a scope this size, a
+  // run that would clip nothing should say so rather than churn through
+  // thousands of skips.
+  const canRun = !running && pending > 0 && dest.trim() !== "";
 
   async function browse() {
     const picked = await openDialog({
@@ -108,7 +117,7 @@ export function SamplerPanel({
             disabled={!canRun}
             className={cn(
               "px-3 py-2 rounded-md font-semibold",
-              "flex items-center justify-center",
+              "flex items-center justify-center gap-1.5",
               "disabled:opacity-50 disabled:cursor-not-allowed",
               "bg-accent text-bg hover:opacity-90",
             )}
@@ -117,11 +126,27 @@ export function SamplerPanel({
                 ? "Scan the library first"
                 : dest.trim() === ""
                   ? "Choose a destination directory"
-                  : `Sample ${count.toLocaleString()} tracks · ${SAMPLE_SECS}s each → ${dest}`
+                  : pending === 0
+                    ? `Every one of the ${count.toLocaleString()} tracks in scope already has a clip — nothing to do.`
+                    : `Clip ${pending.toLocaleString()} of the ${count.toLocaleString()} tracks in scope · ${SAMPLE_SECS}s each → ${dest}` +
+                      (done > 0
+                        ? `\n\n${done.toLocaleString()} already have a clip and will be skipped.`
+                        : "")
             }
-            aria-label={count > 0 ? `Sample ${count.toLocaleString()} tracks` : "Sample"}
+            aria-label={
+              pending > 0
+                ? `Clip ${pending.toLocaleString()} tracks`
+                : "Nothing to clip"
+            }
           >
             <Scissors size={14} />
+            {/* The count is the whole point of showing it: an hours-long run
+                over 12k tracks should never start from an unlabelled icon. */}
+            {count > 0 && (
+              <span className="text-xs tabular-nums">
+                {pending.toLocaleString()}
+              </span>
+            )}
           </button>
         )}
         {trailing}

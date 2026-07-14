@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   ArrowRightLeft,
@@ -44,6 +44,8 @@ import {
   type ScanProgress,
   type ScanRow,
   type Verdict,
+  loadPublishedManifest,
+  type PublishedManifest,
 } from "./lib/tauri";
 import {
   clearIdentity,
@@ -113,7 +115,11 @@ export default function App() {
     verdict: "All",
     search: "",
     sample: "all",
+    published: "all",
   });
+  // ndisc's published-release manifest (suite-shared). null = never exported;
+  // that is a normal state, and the "published" filter is simply unavailable.
+  const [manifest, setManifest] = useState<PublishedManifest | null>(null);
   const [status, setStatus] = useState<{ text: string; tone: "muted" | "warn" | "ok" | "alert" }>(
     { text: "ready", tone: "muted" },
   );
@@ -451,7 +457,7 @@ export default function App() {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
-        setFilter({ verdict: "All", search: "", sample: "all" });
+        setFilter({ verdict: "All", search: "", sample: "all", published: "all" });
       }
     }
     window.addEventListener("keydown", onKey);
@@ -466,6 +472,38 @@ export default function App() {
     [report],
   );
 
+  // Pick up ndisc's manifest on mount. Cheap (one small JSON), and re-read on
+  // every scan so a fresh export from ndisc is honoured without a relaunch.
+  useEffect(() => {
+    loadPublishedManifest()
+      .then(setManifest)
+      .catch(() => setManifest(null));
+  }, [report]);
+
+  // Release folders ndisc has published, as a set for O(1) lookup.
+  const publishedDirs = useMemo(
+    () => new Set((manifest?.releases ?? []).map((r) => r.dir.replace(/\/+$/, ""))),
+    [manifest],
+  );
+
+  // Is this track inside a published release? Walk up from the file's folder —
+  // a multi-disc layout puts tracks in <release>/CD1/, so the release dir is
+  // not always the immediate parent.
+  const inPublishedRelease = useCallback(
+    (path: string) => {
+      if (publishedDirs.size === 0) return false;
+      let dir = path.slice(0, path.lastIndexOf("/"));
+      while (dir.length > 1) {
+        if (publishedDirs.has(dir)) return true;
+        const cut = dir.lastIndexOf("/");
+        if (cut <= 0) break;
+        dir = dir.slice(0, cut);
+      }
+      return false;
+    },
+    [publishedDirs],
+  );
+
   const filteredRows: ScanRow[] = useMemo(() => {
     if (!report) return [];
     const q = filter.search.trim().toLowerCase();
@@ -477,9 +515,26 @@ export default function App() {
         if (filter.sample === "sampled" && !has) return false;
         if (filter.sample === "unsampled" && has) return false;
       }
+      if (filter.published === "published" && !inPublishedRelease(r.path)) {
+        return false;
+      }
       return true;
     });
-  }, [report, filter, sampledSignatures, libRoot, lowerPaths]);
+  }, [report, filter, sampledSignatures, libRoot, lowerPaths, inPublishedRelease]);
+
+  // How many of the filtered rows have no clip yet — the work a Sample run
+  // would actually do. Sampling is idempotent (existing clips are skipped), so
+  // the scope size on its own overstates it: re-running a finished scope reads
+  // as thousands of tracks when the honest answer is zero.
+  const pendingSamples = useMemo(
+    () =>
+      filteredRows.reduce(
+        (n, r) =>
+          sampledSignatures.has(sourceSignature(r.path, libRoot)) ? n : n + 1,
+        0,
+      ),
+    [filteredRows, sampledSignatures, libRoot],
+  );
 
   const counts = useMemo(() => {
     const c: Record<Verdict, number> = {
@@ -509,7 +564,8 @@ export default function App() {
   const anyFilter =
     filter.verdict !== "All" ||
     filter.search.trim() !== "" ||
-    filter.sample !== "all";
+    filter.sample !== "all" ||
+    filter.published !== "all";
 
   // Destination-tree logic (pkexec + create-mirror + orphan listing), decoupled
   // from any one panel: the controls render in the Source & destination strip,
@@ -722,6 +778,7 @@ export default function App() {
               <SamplerPanel
                 bare
                 rows={filteredRows}
+                pending={pendingSamples}
                 dest={workspaceDest}
                 setDest={setWorkspaceDest}
                 sampling={sampling}
@@ -827,7 +884,11 @@ export default function App() {
               ) : undefined
             }
           >
-            <Filters filter={filter} setFilter={setFilter} />
+            <Filters
+                filter={filter}
+                setFilter={setFilter}
+                manifestCount={manifest ? manifest.releases.length : null}
+              />
             <LibraryTree
               rows={filteredRows}
               libRoot={libRoot}

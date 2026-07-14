@@ -1303,6 +1303,52 @@ fn sample_one(item: &SampleItem, duration_secs: u32, start_offset_secs: u32) -> 
 /// frontend mirrors this via `sourceSignature(srcPath, srcRoot)` so a
 /// scan row is "has-local-sample" iff its signature is in the returned
 /// set. Empty list if the dest doesn't exist (fresh setup).
+// ---------------------------------------------------------------------------
+// ndisc published manifest — cross-app scope
+// ---------------------------------------------------------------------------
+//
+// ntree has no idea what has been published to Nostr; ndisc does. Rather than
+// read ndisc's SQLite (coupling ntree to that schema and file location), ndisc
+// EXPORTS a manifest to a suite-shared path and ntree reads it. Derived and
+// disposable — if it is absent or stale, the filter simply cannot be used, and
+// nothing else breaks.
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct ManifestRelease {
+    id: i64,
+    artist: String,
+    title: String,
+    /// Absolute path of the release folder on disk.
+    dir: String,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct PublishedManifest {
+    version: u32,
+    generated_at: i64,
+    library_root: Option<String>,
+    releases: Vec<ManifestRelease>,
+}
+
+/// Read ndisc's published-release manifest from the suite-shared path.
+/// `Ok(None)` when it has never been exported — that is a normal state, not an
+/// error: the user just has not run "Export published manifest" in ndisc.
+#[tauri::command]
+fn load_published_manifest() -> Result<Option<PublishedManifest>, String> {
+    let home = std::env::var("HOME").map_err(|e| format!("HOME: {e}"))?;
+    let path = PathBuf::from(home).join(".local/share/ndisc-suite/published.json");
+    if !path.is_file() {
+        return Ok(None);
+    }
+    let text = fs::read_to_string(&path)
+        .map_err(|e| format!("read {}: {e}", path.display()))?;
+    let manifest: PublishedManifest = serde_json::from_str(&text)
+        .map_err(|e| format!("parse {}: {e}", path.display()))?;
+    Ok(Some(manifest))
+}
+
 #[tauri::command]
 async fn scan_sample_dest(
     dest_root: String,
@@ -1962,6 +2008,7 @@ pub fn run() {
             sample_tracks,
             cancel_sample,
             scan_sample_dest,
+            load_published_manifest,
             list_dest_folders,
             trash_dest_folder,
             create_dest_folder,
