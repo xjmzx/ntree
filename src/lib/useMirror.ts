@@ -79,14 +79,24 @@ export function useMirror({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dest]);
 
-  // Orphans = clip folders whose artist/release has no matching source
-  // release (renamed/removed sources, stale leftovers). The Library tree shows
-  // in-source releases; orphans are the residue it can't show.
+  // Orphans = clip folders with no matching source directory (renamed/removed
+  // sources, stale leftovers). The Library tree shows in-source releases;
+  // orphans are the residue it can't show.
+  //
+  // Compare the FULL relpath: the clip tree mirrors the source tree, so the
+  // relpath is already the key. The old test truncated to the first two
+  // segments, which silently mis-classified every category folder and every
+  // multi-disc release as an orphan — and this list feeds a delete button.
+  //
+  // With no scan loaded, `sourceRels` is empty and EVERY clip folder would look
+  // orphaned. That is not "all orphans", it is "we don't know" — and answering
+  // it with a fully-armed prune button would offer to bin the entire clip tree.
+  // Say nothing instead.
   const orphans = useMemo(
     () =>
-      folders.filter(
-        (f) => !sourceRels.has(f.rel.split("/").slice(0, 2).join("/")),
-      ),
+      sourceRels.size === 0
+        ? []
+        : folders.filter((f) => !sourceRels.has(f.rel)),
     [folders, sourceRels],
   );
 

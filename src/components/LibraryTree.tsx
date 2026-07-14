@@ -269,7 +269,14 @@ export function LibraryTree({
         )}
         {artists.map((artist) => {
           const isOpen = openArtists.has(artist.name);
-          const allArtistTracks = artist.albums.flatMap((a) => a.tracks);
+          // Audio AND video. A clip is an *audio* excerpt, and a music
+          // video's audio is legitimate library content — the batch Scissors
+          // has always included them, so the per-scope one must too or the
+          // two buttons mean different things by "this release".
+          const allArtistTracks = artist.albums.flatMap((a) => [
+            ...a.tracks,
+            ...a.videos,
+          ]);
           const {
             sampled: sampledHere,
             published: publishedHere,
@@ -325,11 +332,14 @@ export function LibraryTree({
                 artist.albums.map((album) => {
                   const key = `${artist.name}//${album.name}`;
                   const alOpen = openAlbums.has(key);
+                  // Everything with an audio track in it — audio files and
+                  // videos alike. Matches what the batch Scissors samples.
+                  const albumSampleable = [...album.tracks, ...album.videos];
                   const {
                     sampled: alSampled,
                     published: alPublished,
                     dot: alDot,
-                  } = scopeStatus(album.tracks, hasSample, isPublished);
+                  } = scopeStatus(albumSampleable, hasSample, isPublished);
                   const alDotTitle =
                     alPublished > 0
                       ? `${alPublished} of ${album.tracks.length} clips published to Nostr by this app (kind:1063) · click to (re)sample`
@@ -368,7 +378,12 @@ export function LibraryTree({
                           </span>
                         </button>
                         <button
-                          onClick={() => onSampleScope(`${artist.name} / ${album.name}`, album.tracks)}
+                          onClick={() =>
+                            onSampleScope(
+                              `${artist.name} / ${album.name}`,
+                              albumSampleable,
+                            )
+                          }
                           title={alDotTitle}
                           className="ml-2 shrink-0 inline-flex items-center justify-center
                                      h-5 px-1.5 rounded bg-mauve/20 hover:bg-mauve/30
@@ -442,8 +457,10 @@ export function LibraryTree({
                             </div>
                           );
                         })}
-                      {/* Audio-visual files — recognised + shown, never
-                          analysed or sampled. Double-click reveals in folder. */}
+                      {/* Audio-visual files — never *analysed* (no lossless
+                          verdict), but they ARE sampled: the clip is an audio
+                          excerpt, and a music video's audio counts. Double-click
+                          reveals in folder. */}
                       {alOpen &&
                         album.videos.map((v) => (
                           <div

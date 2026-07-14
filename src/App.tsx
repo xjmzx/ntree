@@ -100,14 +100,31 @@ export default function App() {
     relays,
     libRoot,
   } = useLibrary();
-  // Full set of source releases ("artist/release") — lets the Mirror panel
-  // flag orphan clip folders (clips on disk with no matching release).
+  // Every directory under the library root that actually holds a scanned file,
+  // as a relpath. The clip tree mirrors the source tree exactly, so a clip leaf
+  // folder is an orphan iff its relpath is not in here — no assumption about
+  // depth.
+  //
+  // This used to be the set of `artist/release` pairs from splitPath(), which
+  // was WRONG in a way that DELETED DATA: splitPath's `release` absorbs every
+  // middle segment ("The The/Hyena"), while the orphan test truncated the clip
+  // folder to two segments ("Soundtracks/The The"). The two could never match
+  // for anything nested deeper than artist/release — a category folder, or any
+  // multi-disc release — so every one of them was reported as an orphan and
+  // offered up for pruning. 152 perfectly good clips went to the trash before
+  // this was caught. Compare the mirrored path to the mirrored path; do not
+  // re-derive it.
   const sourceRels = useMemo(
     () =>
       new Set(
-        uniquePairs(report?.rows ?? [], libRoot).map(
-          (p) => `${p.artist}/${p.release}`,
-        ),
+        (report?.rows ?? []).map((r) => {
+          let rel = r.path.startsWith(libRoot)
+            ? r.path.slice(libRoot.length)
+            : r.path;
+          rel = rel.replace(/^\/+/, "");
+          const i = rel.lastIndexOf("/");
+          return i < 0 ? "" : rel.slice(0, i);
+        }),
       ),
     [report, libRoot],
   );
@@ -133,6 +150,10 @@ export default function App() {
   // per-scope Scissors in LibraryTree. One in-flight batch at a time;
   // null when idle.
   const [sampling, setSampling] = useState<SampleProgress | null>(null);
+  // Why the failures failed. The backend has always computed this and the UI
+  // has always thrown it away, so "31 failed" was the whole story the user got
+  // — unactionable, and it sent us guessing at ffmpeg from the outside.
+  const [sampleErrors, setSampleErrors] = useState<string[]>([]);
   const samplingActive = useRef(false);
   const sampleCancelledRef = useRef(false);
   const sampleUnlisten = useRef<(() => void) | null>(null);
@@ -406,6 +427,7 @@ export default function App() {
 
     samplingActive.current = true;
     sampleCancelledRef.current = false;
+    setSampleErrors([]);
     setSampling({ done: 0, total: tracks.length, path: "", outcome: "Created" });
     setStatus({
       text: `sampling ${tracks.length.toLocaleString()} tracks (${label}) — ${SAMPLE_SECS}s each → ${dest}`,
@@ -416,6 +438,7 @@ export default function App() {
       const unlisten = await onSampleProgress((p) => setSampling(p));
       sampleUnlisten.current = unlisten;
       const result = await sampleTracks(items, SAMPLE_SECS, SAMPLE_START_OFFSET_SECS);
+      setSampleErrors(result.errors ?? []);
       const parts: string[] = [];
       if (result.created > 0) parts.push(`${result.created.toLocaleString()} created`);
       if (result.skipped > 0) parts.push(`${result.skipped.toLocaleString()} skipped`);
@@ -800,6 +823,35 @@ export default function App() {
         {/* Orphan clips — full-width strip directly under Source & destination,
             present only when there's something to clean. */}
         <OrphanStrip mirror={mirror} />
+
+        {/* Why the last sample run failed. A count alone is unactionable. */}
+        {sampleErrors.length > 0 && (
+          <div className="shrink-0 border border-alert/40 bg-alert/10 p-3">
+            <div className="flex items-start gap-2">
+              <AlertTriangle size={15} className="text-alert shrink-0 mt-0.5" />
+              <div className="min-w-0 flex-1">
+                <p className="text-alert text-sm font-medium">
+                  {sampleErrors.length} file
+                  {sampleErrors.length === 1 ? "" : "s"} could not be sampled
+                </p>
+                <ul className="mt-1.5 space-y-0.5 font-mono text-[11px] text-fg/75 max-h-40 overflow-y-auto">
+                  {sampleErrors.map((e, i) => (
+                    <li key={i} className="break-all">
+                      {e}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <button
+                onClick={() => setSampleErrors([])}
+                className="shrink-0 px-2 py-1 text-xs rounded bg-surface
+                           hover:bg-surfaceHover text-muted hover:text-fg"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
 
         <OperationOutput
           scan={scanState}

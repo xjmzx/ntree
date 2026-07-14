@@ -197,6 +197,32 @@ fn run_with_timeout(mut cmd: Command, timeout: Duration) -> RunOutcome {
         Ok(c) => c,
         Err(_) => return RunOutcome::Failed,
     };
+
+    // Drain both pipes on their own threads WHILE the child runs.
+    //
+    // This used to wait first and read afterwards, which deadlocks: a pipe
+    // holds ~64 KB, and once it is full the child BLOCKS on write and can
+    // never exit. ffmpeg is chatty — a single mp3 with a stream of decode
+    // warnings emitted 259 KB of stderr — so the child would wedge, the wait
+    // would hit its timeout, and a perfectly good file was reported as
+    // "timed out" after 60s of doing nothing. It was never slow; it was stuck
+    // on a pipe we weren't reading. Standalone runs never showed it, because
+    // every shell and test harness drains as it goes.
+    let out_h = child.stdout.take().map(|mut h| {
+        std::thread::spawn(move || {
+            let mut buf = Vec::new();
+            let _ = h.read_to_end(&mut buf);
+            buf
+        })
+    });
+    let err_h = child.stderr.take().map(|mut h| {
+        std::thread::spawn(move || {
+            let mut buf = Vec::new();
+            let _ = h.read_to_end(&mut buf);
+            buf
+        })
+    });
+
     let status = match child.wait_timeout(timeout) {
         Ok(Some(s)) => s,
         Ok(None) => {
@@ -210,10 +236,9 @@ fn run_with_timeout(mut cmd: Command, timeout: Duration) -> RunOutcome {
             return RunOutcome::Failed;
         }
     };
-    let mut stdout = Vec::new();
-    let mut stderr = Vec::new();
-    if let Some(mut h) = child.stdout.take() { let _ = h.read_to_end(&mut stdout); }
-    if let Some(mut h) = child.stderr.take() { let _ = h.read_to_end(&mut stderr); }
+    // The child has exited, so both readers see EOF and join promptly.
+    let stdout = out_h.and_then(|h| h.join().ok()).unwrap_or_default();
+    let stderr = err_h.and_then(|h| h.join().ok()).unwrap_or_default();
     RunOutcome::Ok(ProcessOutput { status, stdout, stderr })
 }
 
@@ -1256,16 +1281,26 @@ fn scan_inner(
 /// even on huge files; doesn't decode-and-discard). `-c:a flac` re-encodes
 /// to a self-contained FLAC. Idempotent: existing dest files are skipped.
 /// Partial output from a failed run is removed.
-fn sample_one(item: &SampleItem, duration_secs: u32, start_offset_secs: u32) -> SampleOutcome {
+/// Returns the outcome and, when it went wrong, WHY. A bare count of failures
+/// is unactionable — it sends you guessing at ffmpeg from the outside instead
+/// of reading the error the tool already produced.
+fn sample_one(
+    item: &SampleItem,
+    duration_secs: u32,
+    start_offset_secs: u32,
+) -> (SampleOutcome, Option<String>) {
     let src = Path::new(&item.src);
     let dest = Path::new(&item.dest);
 
     if dest.exists() {
-        return SampleOutcome::Skipped;
+        return (SampleOutcome::Skipped, None);
     }
     if let Some(parent) = dest.parent() {
-        if fs::create_dir_all(parent).is_err() {
-            return SampleOutcome::Failed;
+        if let Err(e) = fs::create_dir_all(parent) {
+            return (
+                SampleOutcome::Failed,
+                Some(format!("could not create {}: {e}", parent.display())),
+            );
         }
     }
 
@@ -1277,23 +1312,48 @@ fn sample_one(item: &SampleItem, duration_secs: u32, start_offset_secs: u32) -> 
         "-i",
     ])
     .arg(src)
-    .args(["-c:a", "flac", "-y"])
+    // -vn: audio only. Without it ffmpeg maps EVERY stream, including a
+    // track's embedded cover art, and tries to re-encode the picture into the
+    // clip. Plenty of tags lie about their own image format — an APIC frame
+    // declaring PNG while holding JPEG bytes ("Invalid PNG signature
+    // 0xFFD8FFE0…") — and when the picture fails to decode, ffmpeg aborts the
+    // whole conversion and writes nothing. The perfectly good audio was being
+    // thrown away because of a broken thumbnail. A clip is audio; it has no
+    // business touching the artwork.
+    //
+    // This also covers video sources, whose audio is what we want anyway.
+    .args(["-vn", "-c:a", "flac", "-y"])
     .arg(dest);
 
     match run_with_timeout(cmd, Duration::from_secs(FFMPEG_TIMEOUT_SECS)) {
         RunOutcome::Ok(out) => {
             if out.status.success() {
-                SampleOutcome::Created
+                (SampleOutcome::Created, None)
             } else {
                 let _ = fs::remove_file(dest);
-                SampleOutcome::Failed
+                // ffmpeg puts the real reason on the last line of stderr.
+                let err = String::from_utf8_lossy(&out.stderr);
+                let last = err
+                    .lines()
+                    .rev()
+                    .find(|l| !l.trim().is_empty())
+                    .unwrap_or("no output")
+                    .trim()
+                    .to_string();
+                (SampleOutcome::Failed, Some(format!("ffmpeg: {last}")))
             }
         }
         RunOutcome::TimedOut => {
             let _ = fs::remove_file(dest);
-            SampleOutcome::TimedOut
+            (
+                SampleOutcome::TimedOut,
+                Some(format!("no response after {FFMPEG_TIMEOUT_SECS}s — killed")),
+            )
         }
-        RunOutcome::Failed => SampleOutcome::Failed,
+        RunOutcome::Failed => (
+            SampleOutcome::Failed,
+            Some("could not run ffmpeg (is it installed?)".to_string()),
+        ),
     }
 }
 
@@ -1564,12 +1624,12 @@ fn sample_inner(
 
     let done = AtomicUsize::new(0);
 
-    let outcomes: Vec<SampleOutcome> = pool.install(|| {
+    let outcomes: Vec<(SampleOutcome, Option<String>)> = pool.install(|| {
         items
             .par_iter()
             .map(|item| {
-                let outcome = if cancel.load(Ordering::Relaxed) {
-                    SampleOutcome::Cancelled
+                let (outcome, why) = if cancel.load(Ordering::Relaxed) {
+                    (SampleOutcome::Cancelled, None)
                 } else {
                     sample_one(item, duration_secs, start_offset_secs)
                 };
@@ -1583,7 +1643,7 @@ fn sample_inner(
                         outcome,
                     },
                 );
-                outcome
+                (outcome, why)
             })
             .collect()
     });
@@ -1597,20 +1657,32 @@ fn sample_inner(
         cancelled: 0,
         errors: Vec::new(),
     };
-    for (item, o) in items.iter().zip(outcomes.iter()) {
+    for (item, (o, why)) in items.iter().zip(outcomes.iter()) {
+        // The reason travels with the path — "N failed" on its own tells you
+        // nothing you can act on.
+        let name = Path::new(&item.src)
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| item.src.clone());
         match o {
             SampleOutcome::Created => report.created += 1,
             SampleOutcome::Skipped => report.skipped += 1,
             SampleOutcome::Failed => {
                 report.failed += 1;
                 if report.errors.len() < ERROR_SAMPLE {
-                    report.errors.push(item.src.clone());
+                    report.errors.push(match why {
+                        Some(w) => format!("{name} — {w}"),
+                        None => name,
+                    });
                 }
             }
             SampleOutcome::TimedOut => {
                 report.timed_out += 1;
                 if report.errors.len() < ERROR_SAMPLE {
-                    report.errors.push(format!("{} (timed out)", item.src));
+                    report.errors.push(match why {
+                        Some(w) => format!("{name} — {w}"),
+                        None => format!("{name} — timed out"),
+                    });
                 }
             }
             SampleOutcome::Cancelled => report.cancelled += 1,
