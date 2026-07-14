@@ -115,10 +115,12 @@ export default function App() {
     verdict: "All",
     search: "",
     sample: "all",
-    published: "all",
+    released: "all",
   });
-  // ndisc's published-release manifest (suite-shared). null = never exported;
-  // that is a normal state, and the "published" filter is simply unavailable.
+  // ndisc's released-release manifest (suite-shared). null = never exported;
+  // that is a normal state, and the "released" filter is simply unavailable.
+  // NB "released" (this: a kind:31237 RELEASE, per ndisc) is a different fact
+  // from `publishedSignatures` below (a kind:1063 CLIP, published by ntree).
   const [manifest, setManifest] = useState<PublishedManifest | null>(null);
   const [status, setStatus] = useState<{ text: string; tone: "muted" | "warn" | "ok" | "alert" }>(
     { text: "ready", tone: "muted" },
@@ -457,7 +459,7 @@ export default function App() {
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
-        setFilter({ verdict: "All", search: "", sample: "all", published: "all" });
+        setFilter({ verdict: "All", search: "", sample: "all", released: "all" });
       }
     }
     window.addEventListener("keydown", onKey);
@@ -489,7 +491,7 @@ export default function App() {
   // Is this track inside a published release? Walk up from the file's folder —
   // a multi-disc layout puts tracks in <release>/CD1/, so the release dir is
   // not always the immediate parent.
-  const inPublishedRelease = useCallback(
+  const inNdiscRelease = useCallback(
     (path: string) => {
       if (publishedDirs.size === 0) return false;
       let dir = path.slice(0, path.lastIndexOf("/"));
@@ -515,12 +517,12 @@ export default function App() {
         if (filter.sample === "sampled" && !has) return false;
         if (filter.sample === "unsampled" && has) return false;
       }
-      if (filter.published === "published" && !inPublishedRelease(r.path)) {
+      if (filter.released === "released" && !inNdiscRelease(r.path)) {
         return false;
       }
       return true;
     });
-  }, [report, filter, sampledSignatures, libRoot, lowerPaths, inPublishedRelease]);
+  }, [report, filter, sampledSignatures, libRoot, lowerPaths, inNdiscRelease]);
 
   // How many of the filtered rows have no clip yet — the work a Sample run
   // would actually do. Sampling is idempotent (existing clips are skipped), so
@@ -565,7 +567,7 @@ export default function App() {
     filter.verdict !== "All" ||
     filter.search.trim() !== "" ||
     filter.sample !== "all" ||
-    filter.published !== "all";
+    filter.released !== "all";
 
   // Destination-tree logic (pkexec + create-mirror + orphan listing), decoupled
   // from any one panel: the controls render in the Source & destination strip,

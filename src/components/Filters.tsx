@@ -13,15 +13,21 @@ export interface FilterState {
    */
   sample: SampleFilter;
   /**
-   * Narrow to tracks inside releases ndisc has published to Nostr. Read from
-   * the suite-shared manifest ndisc exports — ntree has no idea what is
-   * published on its own. `"all"` ignores it; unavailable when no manifest has
-   * been exported.
+   * Narrow to tracks inside RELEASES ndisc has published to Nostr (kind:31237).
+   * Read from the suite-shared manifest ndisc exports — ntree has no idea what
+   * is released on its own. `"all"` ignores it; unavailable when no manifest
+   * has been exported.
+   *
+   * Called "released", NOT "published", on purpose. ntree already uses
+   * "published" (and the same mauve) in the Library tree for something else
+   * entirely: a *clip* this app pushed as a NIP-94 kind:1063 file event. Two
+   * different kinds, two different subjects, two different sources of truth —
+   * they must not share a word.
    */
-  published: PublishedFilter;
+  released: ReleasedFilter;
 }
 
-export type PublishedFilter = "all" | "published";
+export type ReleasedFilter = "all" | "released";
 
 interface FiltersProps {
   filter: FilterState;
@@ -133,35 +139,38 @@ export function Filters({ filter, setFilter, manifestCount }: FiltersProps) {
         );
       })()}
 
-      {/* ndisc-published filter. Only rendered when a manifest exists — with no
+      {/* ndisc-released filter. Only rendered when a manifest exists — with no
           manifest the filter cannot mean anything, and a dead control that
-          silently matches nothing is worse than no control. Mauve = the
-          suite-wide "published to Nostr" colour. */}
+          silently matches nothing is worse than no control.
+
+          The tooltip spells out kind:31237 and the word "release", because the
+          Library tree's mauve dot means a *clip* published as kind:1063. Same
+          colour, adjacent controls, entirely different fact. */}
       {manifestCount != null && (
         <button
           type="button"
           onClick={() =>
             setFilter({
               ...filter,
-              published: filter.published === "all" ? "published" : "all",
+              released: filter.released === "all" ? "released" : "all",
             })
           }
-          aria-pressed={filter.published === "published"}
-          aria-label="ndisc-published filter"
+          aria-pressed={filter.released === "released"}
+          aria-label="ndisc-released filter"
           title={
-            filter.published === "published"
-              ? `Showing only tracks in the ${manifestCount.toLocaleString()} releases ndisc has published to Nostr. Click to clear.`
-              : `Show only tracks inside the ${manifestCount.toLocaleString()} releases ndisc has published to Nostr.`
+            filter.released === "released"
+              ? `Showing only tracks inside the ${manifestCount.toLocaleString()} RELEASES ndisc has published to Nostr (kind:31237). Click to clear.\n\nNot to be confused with the Library's mauve dot, which marks a CLIP this app published (kind:1063).`
+              : `Show only tracks inside the ${manifestCount.toLocaleString()} releases ndisc has published to Nostr (kind:31237) — the scope for sampling the published discography.\n\nNot to be confused with the Library's mauve dot, which marks a clip this app published (kind:1063).`
           }
           className={`flex items-center gap-1.5 h-9 px-2.5 rounded-md text-xs
                       transition-colors ${
-                        filter.published === "published"
+                        filter.released === "released"
                           ? "bg-mauve/20 text-mauve"
                           : "bg-surface hover:bg-surfaceHover text-muted"
                       }`}
         >
           <Radio size={13} />
-          published
+          released
         </button>
       )}
 

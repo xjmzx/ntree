@@ -104,6 +104,16 @@ function countsFor(tracks: TrackRow[]): Record<Verdict, number> {
 // Sample-state of a scope as a simple status dot, reusing the suite's three
 // colour values: not sampled (muted) · sampled (ok green) · sampled + published
 // (mauve). Replaces the old colour-coded leaf on the scope sample buttons.
+//
+// "Published" HERE means a CLIP this app pushed as a NIP-94 kind:1063 file
+// event, tracked in localStorage with no relay verification. It is NOT the
+// filter bar's `released` chip, which means a kind:31237 RELEASE that *ndisc*
+// published. Two kinds, two subjects, two sources of truth — the tooltips say
+// which, because the colour cannot.
+//
+// Note the precedence: mauve beats green, so a scope that is published but only
+// half-sampled looks the same as one fully sampled. The tooltip carries the
+// real counts.
 function scopeStatus(
   tracks: ScanRow[],
   hasSample: (r: ScanRow) => boolean,
@@ -267,7 +277,7 @@ export function LibraryTree({
           } = scopeStatus(allArtistTracks, hasSample, isPublished);
           const artistDotTitle =
             publishedHere > 0
-              ? `${publishedHere} of ${allArtistTracks.length} tracks published · click to (re)sample`
+              ? `${publishedHere} of ${allArtistTracks.length} clips published to Nostr by this app (kind:1063) · click to (re)sample`
               : sampledHere > 0
                 ? `${sampledHere} of ${allArtistTracks.length} tracks sampled · click to sample the rest`
                 : `Sample ${artist.totalTracks} tracks across ${artist.albums.length} releases — 10s each`;
@@ -322,7 +332,7 @@ export function LibraryTree({
                   } = scopeStatus(album.tracks, hasSample, isPublished);
                   const alDotTitle =
                     alPublished > 0
-                      ? `${alPublished} of ${album.tracks.length} tracks published · click to (re)sample`
+                      ? `${alPublished} of ${album.tracks.length} clips published to Nostr by this app (kind:1063) · click to (re)sample`
                       : alSampled > 0
                         ? `${alSampled} of ${album.tracks.length} tracks sampled · click to sample the rest`
                         : `Sample ${album.tracks.length} tracks from this release — 10s each`;
