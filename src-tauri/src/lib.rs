@@ -286,8 +286,13 @@ fn ffprobe_fields(path: &Path) -> FfprobeOutcome {
         // One call, five fields. The scan already pays for this subprocess; the
         // extra fields are free, and they are what turns "62% lossless" into a
         // description of what the library is actually made of.
+        // The AUDIO STREAM's bitrate, with the container's as a fallback.
+        // Container bitrate counts embedded cover art and tags: a 320 kbps CBR
+        // MP3 with a JPEG in it reports 322 kbps and reads as "over 320" — a
+        // rate MP3 cannot even produce. Same mistake as mapping the artwork
+        // into a clip: ask for the audio, not the file.
         "-show_entries",
-        "stream=codec_name,sample_rate,bits_per_raw_sample,channels:format=bit_rate",
+        "stream=codec_name,sample_rate,bits_per_raw_sample,channels,bit_rate:format=bit_rate",
         // KEYED output. ffprobe emits fields in ITS order, not the requested
         // one (probe_video learned this the hard way), so positional parsing is
         // a trap waiting for the first file that omits a field.
@@ -307,7 +312,12 @@ fn ffprobe_fields(path: &Path) -> FfprobeOutcome {
                     // ffprobe writes "N/A" for fields a codec doesn't have —
                     // lossy formats have no bits_per_raw_sample.
                     if !v.is_empty() && v != "N/A" {
-                        map.insert(k.trim(), v);
+                        // FIRST occurrence wins. ffprobe prints the stream's
+                        // fields before the format's, and `bit_rate` appears in
+                        // both — so this prefers the stream and silently falls
+                        // back to the container when the stream omits it (some
+                        // VBR files), which is exactly the precedence we want.
+                        map.entry(k.trim()).or_insert(v);
                     }
                 }
             }
