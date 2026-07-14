@@ -117,7 +117,8 @@ export function PublishPanel({
     <Section
       title="Publish"
       icon={<span className="inline-block w-2 h-2 rounded-full bg-mauve" />}
-      className="border-mauve/30 w-full shrink-0"
+      // Default border, like Library and Radio — see SampleDetails.
+      className="w-full shrink-0"
       contentClassName="flex flex-col gap-2"
     >
       <div className="flex gap-2">

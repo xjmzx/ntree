@@ -64,7 +64,9 @@ export function SampleDetails({
       title="Sample"
       icon={<span className="inline-block w-2 h-2 rounded-full bg-ok/70" />}
       onTitleClick={onCollapse}
-      className="border-accent/30 w-full flex-1 min-h-0"
+      // No tinted stroke: Library and Radio use Section's default border, and a
+      // coloured one here only made this panel read as a different kind of box.
+      className="w-full flex-1 min-h-0"
       contentClassName="flex-1 min-h-0 overflow-auto flex flex-col gap-3"
     >
       {!has && (
