@@ -1,4 +1,6 @@
-# ndisc.tree
+<img src="docs/ntree-lockup.svg" alt="ntree" width="300">
+
+# ntree
 
 (binary `ndisc-tree`; formerly `audio-flac-quality-check-tauri` / `ndisc.blobtree`)
 
