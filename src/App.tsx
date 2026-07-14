@@ -46,6 +46,8 @@ import {
   type Verdict,
   loadPublishedManifest,
   type PublishedManifest,
+  libraryDrift,
+  type LibraryDrift,
 } from "./lib/tauri";
 import {
   clearIdentity,
@@ -154,6 +156,17 @@ export default function App() {
   // has always thrown it away, so "31 failed" was the whole story the user got
   // — unactionable, and it sent us guessing at ffmpeg from the outside.
   const [sampleErrors, setSampleErrors] = useState<string[]>([]);
+  // How far the report has drifted from disk. Re-checked whenever the report
+  // changes — on load, and after every scan — because those are exactly the
+  // moments the answer can change. Cheap: a directory walk, no analysis.
+  const [drift, setDrift] = useState<LibraryDrift | null>(null);
+  const [driftDismissed, setDriftDismissed] = useState(false);
+  useEffect(() => {
+    setDriftDismissed(false);
+    libraryDrift()
+      .then(setDrift)
+      .catch(() => setDrift(null));
+  }, [report]);
   const samplingActive = useRef(false);
   const sampleCancelledRef = useRef(false);
   const sampleUnlisten = useRef<(() => void) | null>(null);
@@ -823,6 +836,72 @@ export default function App() {
         {/* Orphan clips — full-width strip directly under Source & destination,
             present only when there's something to clean. */}
         <OrphanStrip mirror={mirror} />
+
+        {/* Report vs disk. Everything downstream reads the report as if it were
+            disk; when it isn't, the failure is silent and lands somewhere else
+            entirely — the sampler spent three runs clipping files that ntree's
+            own video-normalize pass had already renamed. */}
+        {drift &&
+          !driftDismissed &&
+          drift.unindexedTotal + drift.staleTotal > 0 && (
+            <div className="shrink-0 border border-warn/40 bg-warn/10 p-3">
+              <div className="flex items-start gap-2">
+                <AlertTriangle size={15} className="text-warn shrink-0 mt-0.5" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-warn text-sm font-medium">
+                    The scan report no longer matches disk
+                  </p>
+                  <p className="mt-1 text-xs text-fg/75">
+                    {drift.unindexedTotal > 0 && (
+                      <>
+                        <span className="font-semibold text-fg">
+                          {drift.unindexedTotal.toLocaleString()}
+                        </span>{" "}
+                        file{drift.unindexedTotal === 1 ? "" : "s"} on disk are
+                        not in the report — the sampler cannot see them.{" "}
+                      </>
+                    )}
+                    {drift.staleTotal > 0 && (
+                      <>
+                        <span className="font-semibold text-fg">
+                          {drift.staleTotal.toLocaleString()}
+                        </span>{" "}
+                        file{drift.staleTotal === 1 ? "" : "s"} in the report are
+                        gone from disk — the sampler will try them and fail.{" "}
+                      </>
+                    )}
+                    Rescan to bring it back in step.
+                  </p>
+                  <p className="mt-1 text-[11px] text-muted tabular-nums">
+                    indexed {drift.indexed.toLocaleString()} · on disk{" "}
+                    {drift.onDisk.toLocaleString()}
+                    {drift.generated && <> · scanned {drift.generated}</>}
+                  </p>
+                  {[...drift.stale, ...drift.unindexed].length > 0 && (
+                    <ul className="mt-1.5 space-y-0.5 font-mono text-[11px] text-muted max-h-32 overflow-y-auto">
+                      {drift.stale.map((p) => (
+                        <li key={`s-${p}`} className="break-all">
+                          <span className="text-warn/80">gone</span> {p}
+                        </li>
+                      ))}
+                      {drift.unindexed.map((p) => (
+                        <li key={`u-${p}`} className="break-all">
+                          <span className="text-warn/80">new </span> {p}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                <button
+                  onClick={() => setDriftDismissed(true)}
+                  className="shrink-0 px-2 py-1 text-xs rounded bg-surface
+                             hover:bg-surfaceHover text-muted hover:text-fg"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          )}
 
         {/* Why the last sample run failed. A count alone is unactionable. */}
         {sampleErrors.length > 0 && (

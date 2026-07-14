@@ -3,12 +3,17 @@ import { uniquePairs } from "./paths";
 import {
   createMirrorTree,
   listDestFolders,
+  orphanClips,
+  trashDestFiles,
   trashDestFolder,
   type DestFolder,
   type MirrorResult,
   type ScanRow,
 } from "./tauri";
 import type { MirrorState } from "../components/OperationOutput";
+
+// Must match App's SAMPLE_SECS — the clip suffix is `.<secs>s.flac`.
+const SAMPLE_SECS = 10;
 
 type State =
   | { kind: "idle" }
@@ -49,6 +54,12 @@ export function useMirror({
   const [sudo, setSudo] = useState(false);
   const [state, setState] = useState<State>({ kind: "idle" });
   const [folders, setFolders] = useState<DestFolder[]>([]);
+  // File-grain orphans: clips whose SOURCE file is gone. The folder check below
+  // is structurally blind to these — a track renamed inside a still-valid
+  // release leaves a stale clip in a folder that is perfectly fine. Renaming 14
+  // tracks in one release left 14 such clips, and the folder check could never
+  // have seen one of them.
+  const [orphanFiles, setOrphanFiles] = useState<string[]>([]);
 
   const pairs = useMemo(() => uniquePairs(rows, libRoot), [rows, libRoot]);
 
@@ -63,8 +74,12 @@ export function useMirror({
   async function refreshFolders() {
     if (!dest.trim()) {
       setFolders([]);
+      setOrphanFiles([]);
       return;
     }
+    orphanClips(dest, libRoot, SAMPLE_SECS)
+      .then(setOrphanFiles)
+      .catch(() => setOrphanFiles([]));
     try {
       setFolders(await listDestFolders(dest));
     } catch (e) {
@@ -137,8 +152,28 @@ export function useMirror({
       return;
     }
     try {
-      await trashDestFolder(dest, f.path);
+      await trashDestFolder(dest, libRoot, f.path);
       onStatus({ text: "trashed", tone: "ok" });
+      refreshFolders();
+    } catch (e) {
+      onStatus({ text: `trash failed: ${e}`, tone: "alert" });
+    }
+  }
+
+  async function trashOrphanFiles() {
+    const n = orphanFiles.length;
+    if (!n) return;
+    if (
+      !confirm(
+        `Trash ${n} orphan clip${n === 1 ? "" : "s"}? Their source files no ` +
+          `longer exist. Recoverable — goes to the OS trash.`,
+      )
+    ) {
+      return;
+    }
+    try {
+      const done = await trashDestFiles(dest, libRoot, orphanFiles);
+      onStatus({ text: `trashed ${done} orphan clip(s)`, tone: "ok" });
       refreshFolders();
     } catch (e) {
       onStatus({ text: `trash failed: ${e}`, tone: "alert" });
@@ -148,7 +183,18 @@ export function useMirror({
   const running = state.kind === "running";
   const canRun = !!dest.trim() && pairs.length > 0 && !running;
 
-  return { sudo, setSudo, createMirror, running, canRun, pairs, orphans, trashFolder };
+  return {
+    sudo,
+    setSudo,
+    createMirror,
+    running,
+    canRun,
+    pairs,
+    orphans,
+    trashFolder,
+    orphanFiles,
+    trashOrphanFiles,
+  };
 }
 
 export type UseMirror = ReturnType<typeof useMirror>;

@@ -6,6 +6,7 @@
 //   - load_report / save_report: JSON cache in Tauri app data dir.
 //   - open_folder: xdg-open on the containing folder (double-click action).
 
+use std::collections::HashSet;
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -1523,18 +1524,162 @@ async fn list_dest_folders(dest: String) -> Result<Vec<DestFolder>, String> {
 /// a path strictly *inside* the dest and not be the dest itself — so a stray
 /// call can never trash the library or the dest root.
 #[tauri::command]
-async fn trash_dest_folder(dest: String, path: String) -> Result<(), String> {
+async fn trash_dest_folder(
+    dest: String,
+    root: String,
+    path: String,
+) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || -> Result<(), String> {
-        let base = PathBuf::from(&dest)
-            .canonicalize()
-            .map_err(|e| format!("destination: {e}"))?;
-        let target = PathBuf::from(&path)
-            .canonicalize()
-            .map_err(|e| format!("target: {e}"))?;
-        if target == base || !target.starts_with(&base) {
-            return Err("refusing to trash a path outside the mirror destination".into());
+        let target = PathBuf::from(&path);
+        guard_deletable(Path::new(&dest), Path::new(&root), &target)?;
+        trash::delete(target.canonicalize().map_err(|e| e.to_string())?)
+            .map_err(|e| format!("trash failed: {e}"))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// The one invariant this app has about the filesystem: **nothing may ever be
+/// deleted from the source library.** /data/music is the only irreplaceable
+/// thing here — the clip tree is derived and can be regenerated from it in
+/// minutes, the report is a cache, the BPM store is recoverable. The source is
+/// not.
+///
+/// Every delete path routes through this. It is not enough to check "is the
+/// target inside `dest`", because `dest` is a user-editable text field: point it
+/// at /data/music by typo or misclick and an orphan prune would cheerfully
+/// destroy the library with the old guard's blessing.
+fn guard_deletable(dest: &Path, src_root: &Path, target: &Path) -> Result<(), String> {
+    let base = dest
+        .canonicalize()
+        .map_err(|e| format!("destination: {e}"))?;
+    let target = target
+        .canonicalize()
+        .map_err(|e| format!("target: {e}"))?;
+
+    // 1. Never inside the source library, whatever `dest` claims.
+    if let Ok(root) = src_root.canonicalize() {
+        if target == root || target.starts_with(&root) {
+            return Err(format!(
+                "REFUSING to delete {} — it is inside the source library ({}). \
+                 Nothing in this app deletes from the source.",
+                target.display(),
+                root.display()
+            ));
         }
-        trash::delete(&target).map_err(|e| format!("trash failed: {e}"))
+        // A destination that IS the source (or contains it) is a misconfiguration,
+        // not a workspace. Refuse the whole operation rather than pick through it.
+        if base == root || root.starts_with(&base) {
+            return Err(format!(
+                "REFUSING to operate: the destination ({}) is, or contains, the \
+                 source library ({}). Point the workspace somewhere else.",
+                base.display(),
+                root.display()
+            ));
+        }
+    }
+
+    // 2. And still strictly inside the destination.
+    if target == base || !target.starts_with(&base) {
+        return Err("refusing to trash a path outside the mirror destination".into());
+    }
+    Ok(())
+}
+
+/// Clip files whose SOURCE no longer exists — file-grain orphans.
+///
+/// The folder-grain check (`orphans` in useMirror) only sees a clip folder with
+/// no matching source folder. It cannot see a clip whose source was *renamed
+/// inside a still-valid release*: the folder is fine, only the file is stale.
+/// Renaming 14 tracks in one release left 14 orphan clips that the folder check
+/// was structurally incapable of noticing.
+///
+/// A clip `<dest>/<rel>/<stem>.<dur>s.flac` is an orphan iff no media file
+/// `<root>/<rel>/<stem>.*` exists. Source stems are collected once, so this is
+/// two walks, not a readdir per clip.
+#[tauri::command]
+async fn orphan_clips(
+    dest: String,
+    root: String,
+    duration_secs: u32,
+) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || -> Result<Vec<String>, String> {
+        let dest_pb = PathBuf::from(&dest);
+        let root_pb = PathBuf::from(&root);
+        if !dest_pb.is_dir() {
+            return Ok(Vec::new());
+        }
+        // Every source file, as relpath-minus-extension.
+        let mut stems: HashSet<String> = HashSet::new();
+        for e in WalkDir::new(&root_pb).into_iter().filter_map(|e| e.ok()) {
+            let p = e.path();
+            if !e.file_type().is_file() || !(has_audio_ext(p) || has_video_ext(p)) {
+                continue;
+            }
+            if let Ok(rel) = p.strip_prefix(&root_pb) {
+                let mut s = rel.to_path_buf();
+                s.set_extension("");
+                stems.insert(s.to_string_lossy().into_owned());
+            }
+        }
+        // A source set of zero means we cannot know — an unreadable or wrong
+        // root must never be reported as "everything is an orphan", because
+        // this list feeds a delete button.
+        if stems.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let suffix = format!(".{duration_secs}s.flac");
+        let mut out = Vec::new();
+        for e in WalkDir::new(&dest_pb).into_iter().filter_map(|e| e.ok()) {
+            let p = e.path();
+            if !e.file_type().is_file() {
+                continue;
+            }
+            let Some(name) = p.file_name().and_then(|n| n.to_str()) else {
+                continue;
+            };
+            let Some(stem) = name.strip_suffix(&suffix) else {
+                continue; // not a clip of this duration — leave it alone
+            };
+            let Ok(rel_dir) = p.parent().unwrap_or(&dest_pb).strip_prefix(&dest_pb) else {
+                continue;
+            };
+            let key = if rel_dir.as_os_str().is_empty() {
+                stem.to_string()
+            } else {
+                format!("{}/{stem}", rel_dir.to_string_lossy())
+            };
+            if !stems.contains(&key) {
+                out.push(p.to_string_lossy().into_owned());
+            }
+        }
+        out.sort();
+        Ok(out)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Trash clip FILES. Same guard as `trash_dest_folder`: every path must
+/// canonicalize to something strictly inside the mirror destination. The source
+/// library is never a valid target — nothing in this app deletes from it.
+#[tauri::command]
+async fn trash_dest_files(
+    dest: String,
+    root: String,
+    paths: Vec<String>,
+) -> Result<usize, String> {
+    tauri::async_runtime::spawn_blocking(move || -> Result<usize, String> {
+        let mut n = 0usize;
+        for path in &paths {
+            let target = PathBuf::from(path);
+            guard_deletable(Path::new(&dest), Path::new(&root), &target)?;
+            trash::delete(target.canonicalize().map_err(|e| e.to_string())?)
+                .map_err(|e| format!("trash failed for {path}: {e}"))?;
+            n += 1;
+        }
+        Ok(n)
     })
     .await
     .map_err(|e| e.to_string())?
@@ -1720,6 +1865,90 @@ fn data_dir(app: &AppHandle) -> Result<PathBuf, String> {
     };
     fs::create_dir_all(&dir).map_err(|e| format!("create app_data_dir: {e}"))?;
     Ok(dir)
+}
+
+// ---- drift: has the library moved under the report? ------------------------
+//
+// The report is a snapshot. Everything downstream — the Library tree, the
+// filters, the sampler's scope — reads it as if it were disk. It is not, and
+// nothing ever said so.
+//
+// This is not hypothetical. ntree's own "Normalize videos" pass transcodes
+// .avi/.mpg to .mp4 and moves the originals away, which invalidates its own
+// report; the sampler then spent three runs trying to clip files that no longer
+// existed, and only owned up once failures started reporting their reason. A
+// stale index is silent by nature — that is what makes it worth surfacing.
+//
+// Cheap on purpose: a directory walk with no analysis. The expensive part of a
+// scan is the per-file ffmpeg spectral pass, and drift needs none of it. Uses
+// the SAME media predicate as the scanner, so the two cannot disagree about
+// what counts as a file.
+
+/// How far the report has drifted from disk. Lists are capped — the counts are
+/// the signal; the samples are there to make it concrete.
+const DRIFT_SAMPLE: usize = 40;
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LibraryDrift {
+    root: String,
+    /// When the report was generated (its `generated` field, verbatim).
+    generated: Option<String>,
+    /// Media files the report knows about.
+    indexed: usize,
+    /// Media files actually on disk under the root, right now.
+    on_disk: usize,
+    /// On disk but NOT in the report — the sampler cannot see these at all.
+    unindexed: Vec<String>,
+    unindexed_total: usize,
+    /// In the report but GONE from disk — the sampler will try these and fail.
+    stale: Vec<String>,
+    stale_total: usize,
+}
+
+#[tauri::command]
+async fn library_drift(app: AppHandle) -> Result<Option<LibraryDrift>, String> {
+    let report = load_report(app)?;
+    // No report is not drift — it is simply nothing to compare against.
+    let Some(report) = report else {
+        return Ok(None);
+    };
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let root_pb = PathBuf::from(&report.root);
+        let mut on_disk: HashSet<String> = HashSet::new();
+        for entry in WalkDir::new(&root_pb).into_iter().filter_map(|e| e.ok()) {
+            let p = entry.path();
+            if entry.file_type().is_file() && (has_audio_ext(p) || has_video_ext(p)) {
+                on_disk.insert(p.to_string_lossy().into_owned());
+            }
+        }
+        let indexed: HashSet<String> =
+            report.rows.iter().map(|r| r.path.clone()).collect();
+
+        let mut unindexed: Vec<String> =
+            on_disk.difference(&indexed).cloned().collect();
+        let mut stale: Vec<String> = indexed.difference(&on_disk).cloned().collect();
+        unindexed.sort();
+        stale.sort();
+
+        let (unindexed_total, stale_total) = (unindexed.len(), stale.len());
+        unindexed.truncate(DRIFT_SAMPLE);
+        stale.truncate(DRIFT_SAMPLE);
+
+        Ok(Some(LibraryDrift {
+            root: report.root.clone(),
+            generated: Some(report.generated.clone()),
+            indexed: indexed.len(),
+            on_disk: on_disk.len(),
+            unindexed,
+            unindexed_total,
+            stale,
+            stale_total,
+        }))
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 fn report_path(app: &AppHandle) -> Result<PathBuf, String> {
@@ -2083,6 +2312,8 @@ pub fn run() {
             load_published_manifest,
             list_dest_folders,
             trash_dest_folder,
+            orphan_clips,
+            trash_dest_files,
             create_dest_folder,
             read_audio_bytes,
             nip98_sign_event,
@@ -2093,6 +2324,7 @@ pub fn run() {
             cancel_normalize,
             create_mirror_tree,
             load_report,
+            library_drift,
             save_report,
             open_folder,
             get_identity,
@@ -2104,4 +2336,57 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod guard_tests {
+    use super::*;
+    use std::fs;
+
+    // The suite's one hard invariant: nothing is ever deleted from the source
+    // library. /data/music is the only irreplaceable thing — clips regenerate,
+    // the report is a cache. These pin the guard that enforces it.
+    fn tmp(name: &str) -> PathBuf {
+        let p = std::env::temp_dir().join(format!("ntree-guard-{name}"));
+        let _ = fs::remove_dir_all(&p);
+        fs::create_dir_all(&p).unwrap();
+        p
+    }
+
+    #[test]
+    fn refuses_to_delete_inside_the_source_library() {
+        let root = tmp("src");
+        let dest = tmp("dst");
+        let victim = root.join("track.flac");
+        fs::write(&victim, b"x").unwrap();
+        assert!(guard_deletable(&dest, &root, &victim).is_err());
+    }
+
+    #[test]
+    fn refuses_when_the_destination_is_the_source_library() {
+        // The hole this closes: `dest` is a user-editable text field. Point it
+        // at the library and the old guard ("is it inside dest?") said yes.
+        let root = tmp("src2");
+        let victim = root.join("track.flac");
+        fs::write(&victim, b"x").unwrap();
+        assert!(guard_deletable(&root, &root, &victim).is_err());
+    }
+
+    #[test]
+    fn allows_a_clip_inside_a_real_destination() {
+        let root = tmp("src3");
+        let dest = tmp("dst3");
+        let clip = dest.join("track.10s.flac");
+        fs::write(&clip, b"x").unwrap();
+        assert!(guard_deletable(&dest, &root, &clip).is_ok());
+    }
+
+    #[test]
+    fn still_refuses_outside_the_destination() {
+        let root = tmp("src4");
+        let dest = tmp("dst4");
+        let elsewhere = tmp("other4").join("f");
+        fs::write(&elsewhere, b"x").unwrap();
+        assert!(guard_deletable(&dest, &root, &elsewhere).is_err());
+    }
 }

@@ -188,9 +188,10 @@ export async function listDestFolders(dest: string): Promise<DestFolder[]> {
 /// to paths strictly inside `dest`.
 export async function trashDestFolder(
   dest: string,
+  root: string,
   path: string,
 ): Promise<void> {
-  return invoke("trash_dest_folder", { dest, path });
+  return invoke("trash_dest_folder", { dest, root, path });
 }
 
 /// mkdir a relative folder under the mirror dest; returns its absolute path.
@@ -458,4 +459,52 @@ export interface PublishedManifest {
  *  "Export published manifest" in ndisc yet. */
 export async function loadPublishedManifest(): Promise<PublishedManifest | null> {
   return invoke("load_published_manifest");
+}
+
+/// How far the scan report has drifted from disk.
+///
+/// The report is a snapshot, and everything downstream — the Library tree, the
+/// filters, the sampler's scope — reads it as if it were disk. It is not. A
+/// stale index is silent by nature: ntree's own video-normalize pass renames
+/// files out from under its report, and the sampler then failed on paths that
+/// no longer existed for three runs before anyone noticed.
+export interface LibraryDrift {
+  root: string;
+  generated: string | null;
+  indexed: number;
+  onDisk: number;
+  /** On disk but not in the report — the sampler cannot see these at all. */
+  unindexed: string[];
+  unindexedTotal: number;
+  /** In the report but gone from disk — the sampler will try these and fail. */
+  stale: string[];
+  staleTotal: number;
+}
+
+/** null when there is no report — that is nothing to compare against, not drift. */
+export async function libraryDrift(): Promise<LibraryDrift | null> {
+  return invoke<LibraryDrift | null>("library_drift");
+}
+
+/// Clip files whose SOURCE no longer exists — FILE-grain orphans.
+///
+/// Distinct from the folder-grain check: a track renamed inside a still-valid
+/// release leaves a stale clip in a folder that is perfectly fine, and the
+/// folder check is structurally incapable of seeing it.
+export async function orphanClips(
+  dest: string,
+  root: string,
+  durationSecs: number,
+): Promise<string[]> {
+  return invoke<string[]>("orphan_clips", { dest, root, durationSecs });
+}
+
+/// Trash clip files. Guarded server-side: every path must resolve to something
+/// strictly inside `dest`. The source library is never a valid target.
+export async function trashDestFiles(
+  dest: string,
+  root: string,
+  paths: string[],
+): Promise<number> {
+  return invoke<number>("trash_dest_files", { dest, root, paths });
 }
