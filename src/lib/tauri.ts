@@ -22,6 +22,14 @@ export interface ScanRow {
   peak: number | null;
   sr: number | null;
   info: string;
+  // Structured technical detail, from the same ffprobe call the scan already
+  // runs. Null on reports written before these existed — rescan to populate.
+  codec: string | null;
+  /** Bits per raw sample. Lossless only; lossy codecs have no such thing. */
+  bitDepth: number | null;
+  /** bits/sec, from the container — the honest measure of a lossy file. */
+  bitRate: number | null;
+  channels: number | null;
 }
 
 export interface ScanReport {

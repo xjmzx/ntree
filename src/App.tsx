@@ -783,7 +783,7 @@ export default function App() {
       </header>
 
       {view === "stats" ? (
-        <StatsView counts={counts} />
+        <StatsView counts={counts} rows={report?.rows ?? []} />
       ) : view === "table" ? (
         <TableView report={report} />
       ) : view === "video" ? (

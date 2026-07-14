@@ -6,7 +6,7 @@
 //   - load_report / save_report: JSON cache in Tauri app data dir.
 //   - open_folder: xdg-open on the containing folder (double-click action).
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -72,7 +72,7 @@ fn keyring_service() -> &'static str {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq, Default)]
 enum Verdict {
     /// FLAC passes spectral OR codec is natively lossless (ALAC, PCM-*, APE, …).
     #[serde(rename = "LOSSLESS")]
@@ -89,16 +89,39 @@ enum Verdict {
     Lossy,
     /// ffprobe failed, unrecognized codec, or missing sample rate on a FLAC.
     #[serde(rename = "UNKNOWN")]
+    #[default]
     Unknown,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Default)]
+// Existing fields are all single words, so this is backward-compatible with
+// reports already on disk; it only affects the new bit_depth/bit_rate.
+#[serde(rename_all = "camelCase")]
 struct ScanRow {
     verdict: Verdict,
     path: String,
     peak: Option<f32>,
     sr: Option<u32>,
     info: String,
+    // ---- structured technical detail -------------------------------------
+    // The codec used to live only inside the free-text `info` string
+    // ("lossy · codec=mp3"), which meant the UI could show a verdict but could
+    // not tell you what the library is actually MADE of. These come from the
+    // same ffprobe call the scan already runs, so they cost nothing.
+    //
+    // All Option + serde(default): a report written before this change still
+    // loads, it just has no detail until the next scan.
+    #[serde(default)]
+    codec: Option<String>,
+    /// Bits per raw sample. Meaningful for lossless; absent for lossy codecs,
+    /// which have no such thing.
+    #[serde(default)]
+    bit_depth: Option<u32>,
+    /// bits/sec, from the container. The honest measure of a lossy file.
+    #[serde(default)]
+    bit_rate: Option<u32>,
+    #[serde(default)]
+    channels: Option<u8>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -244,7 +267,13 @@ fn run_with_timeout(mut cmd: Command, timeout: Duration) -> RunOutcome {
 }
 
 enum FfprobeOutcome {
-    Ok { codec: Option<String>, sr: Option<u32> },
+    Ok {
+        codec: Option<String>,
+        sr: Option<u32>,
+        bit_depth: Option<u32>,
+        bit_rate: Option<u32>,
+        channels: Option<u8>,
+    },
     TimedOut,
     Failed,
 }
@@ -254,8 +283,15 @@ fn ffprobe_fields(path: &Path) -> FfprobeOutcome {
     cmd.args([
         "-v", "error",
         "-select_streams", "a:0",
-        "-show_entries", "stream=codec_name,sample_rate",
-        "-of", "default=noprint_wrappers=1:nokey=1",
+        // One call, five fields. The scan already pays for this subprocess; the
+        // extra fields are free, and they are what turns "62% lossless" into a
+        // description of what the library is actually made of.
+        "-show_entries",
+        "stream=codec_name,sample_rate,bits_per_raw_sample,channels:format=bit_rate",
+        // KEYED output. ffprobe emits fields in ITS order, not the requested
+        // one (probe_video learned this the hard way), so positional parsing is
+        // a trap waiting for the first file that omits a field.
+        "-of", "default=noprint_wrappers=1",
     ])
     .arg(path);
     match run_with_timeout(cmd, Duration::from_secs(FFPROBE_TIMEOUT_SECS)) {
@@ -264,10 +300,24 @@ fn ffprobe_fields(path: &Path) -> FfprobeOutcome {
                 return FfprobeOutcome::Failed;
             }
             let s = String::from_utf8_lossy(&out.stdout);
-            let mut lines = s.lines();
-            let codec = lines.next().map(str::trim).filter(|x| !x.is_empty()).map(String::from);
-            let sr = lines.next().and_then(|s| s.trim().parse::<u32>().ok());
-            FfprobeOutcome::Ok { codec, sr }
+            let mut map: HashMap<&str, &str> = HashMap::new();
+            for line in s.lines() {
+                if let Some((k, v)) = line.split_once('=') {
+                    let v = v.trim();
+                    // ffprobe writes "N/A" for fields a codec doesn't have —
+                    // lossy formats have no bits_per_raw_sample.
+                    if !v.is_empty() && v != "N/A" {
+                        map.insert(k.trim(), v);
+                    }
+                }
+            }
+            FfprobeOutcome::Ok {
+                codec: map.get("codec_name").map(|s| (*s).to_string()),
+                sr: map.get("sample_rate").and_then(|s| s.parse().ok()),
+                bit_depth: map.get("bits_per_raw_sample").and_then(|s| s.parse().ok()),
+                bit_rate: map.get("bit_rate").and_then(|s| s.parse().ok()),
+                channels: map.get("channels").and_then(|s| s.parse().ok()),
+            }
         }
         RunOutcome::TimedOut => FfprobeOutcome::TimedOut,
         RunOutcome::Failed => FfprobeOutcome::Failed,
@@ -347,10 +397,13 @@ fn classify(path: &Path, vol_re: &Regex) -> ScanRow {
             peak: None,
             sr: None,
             info: "video".into(),
+            ..Default::default()
         };
     }
-    let (codec, sr) = match ffprobe_fields(path) {
-        FfprobeOutcome::Ok { codec, sr } => (codec, sr),
+    let (codec, sr, bit_depth, bit_rate, channels) = match ffprobe_fields(path) {
+        FfprobeOutcome::Ok { codec, sr, bit_depth, bit_rate, channels } => {
+            (codec, sr, bit_depth, bit_rate, channels)
+        }
         FfprobeOutcome::TimedOut => {
             return ScanRow {
                 verdict: Verdict::Unknown,
@@ -358,6 +411,7 @@ fn classify(path: &Path, vol_re: &Regex) -> ScanRow {
                 peak: None,
                 sr: None,
                 info: format!("ffprobe timed out ({FFPROBE_TIMEOUT_SECS}s)"),
+                ..Default::default()
             };
         }
         FfprobeOutcome::Failed => {
@@ -367,6 +421,7 @@ fn classify(path: &Path, vol_re: &Regex) -> ScanRow {
                 peak: None,
                 sr: None,
                 info: "ffprobe failed".into(),
+                ..Default::default()
             };
         }
     };
@@ -377,6 +432,7 @@ fn classify(path: &Path, vol_re: &Regex) -> ScanRow {
             peak: None,
             sr: None,
             info: "ffprobe: no codec".into(),
+            ..Default::default()
         };
     };
 
@@ -393,6 +449,10 @@ fn classify(path: &Path, vol_re: &Regex) -> ScanRow {
             peak: None,
             sr,
             info: format!("{kind} · codec={codec}"),
+            codec: Some(codec.clone()),
+            bit_depth,
+            bit_rate,
+            channels,
         };
     }
 
@@ -404,6 +464,10 @@ fn classify(path: &Path, vol_re: &Regex) -> ScanRow {
             peak: None,
             sr,
             info: format!("unrecognised codec={codec}"),
+            codec: Some(codec.clone()),
+            bit_depth,
+            bit_rate,
+            channels,
         };
     }
     let Some(sr_val) = sr else {
@@ -413,6 +477,10 @@ fn classify(path: &Path, vol_re: &Regex) -> ScanRow {
             peak: None,
             sr,
             info: "flac · no sample rate".into(),
+            codec: Some(codec.clone()),
+            bit_depth,
+            bit_rate,
+            channels,
         };
     };
 
@@ -433,6 +501,10 @@ fn classify(path: &Path, vol_re: &Regex) -> ScanRow {
                 peak: None,
                 sr,
                 info: format!("ffmpeg timed out ({FFMPEG_TIMEOUT_SECS}s)"),
+                codec: Some(codec.clone()),
+                bit_depth,
+                bit_rate,
+                channels,
             };
         }
         PeakOutcome::Failed => {
@@ -442,6 +514,10 @@ fn classify(path: &Path, vol_re: &Regex) -> ScanRow {
                 peak: None,
                 sr,
                 info: "ffmpeg/volumedetect failed".into(),
+                codec: Some(codec.clone()),
+                bit_depth,
+                bit_rate,
+                channels,
             };
         }
     };
@@ -460,6 +536,10 @@ fn classify(path: &Path, vol_re: &Regex) -> ScanRow {
         peak: Some(peak),
         sr,
         info,
+        codec: Some(codec),
+        bit_depth,
+        bit_rate,
+        channels,
     }
 }
 
