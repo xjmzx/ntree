@@ -5,6 +5,7 @@ import {
   Check,
   Film,
   FolderTree,
+  Home,
   KeyRound,
   LineChart,
   Lock,
@@ -745,28 +746,38 @@ export default function App() {
             version chip, top-left). Balances the 1fr title column so the
             middle module stays centered. */}
         <div className="hidden md:flex items-center justify-end gap-2 mt-1">
-          {/* Stats toggle — borrows ndisc's digital-tone toolbar button. */}
+          {/* view-switch group — Home first, then the alt views; the active
+              view is always lit, and Home is the single way back (matches
+              ndisc). Borrows ndisc's digital-tone toolbar button. */}
+          <ToolbarIconButton
+            tone="digital"
+            pressed={view === "library"}
+            title={view === "library" ? "Library (current view)" : "Home — back to library"}
+            onClick={() => setView("library")}
+          >
+            <Home size={14} />
+          </ToolbarIconButton>
           <ToolbarIconButton
             tone="digital"
             pressed={view === "table"}
-            title={view === "table" ? "Back to library" : "Flat sortable file table"}
-            onClick={() => setView((v) => (v === "table" ? "library" : "table"))}
+            title="Flat sortable file table"
+            onClick={() => setView("table")}
           >
             <Table size={14} />
           </ToolbarIconButton>
           <ToolbarIconButton
             tone="digital"
             pressed={view === "video"}
-            title={view === "video" ? "Back to library" : "Video types (verify / normalize)"}
-            onClick={() => setView((v) => (v === "video" ? "library" : "video"))}
+            title="Video types (verify / normalize)"
+            onClick={() => setView("video")}
           >
             <Film size={14} />
           </ToolbarIconButton>
           <ToolbarIconButton
             tone="digital"
             pressed={view === "stats"}
-            title={view === "stats" ? "Back to library" : "Library quality stats"}
-            onClick={() => setView((v) => (v === "stats" ? "library" : "stats"))}
+            title="Library quality stats"
+            onClick={() => setView("stats")}
           >
             <LineChart size={14} />
           </ToolbarIconButton>
