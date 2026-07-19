@@ -21,6 +21,109 @@ const VERDICT_COLOR: Record<Verdict, string> = {
   UNKNOWN: "text-muted",
 };
 
+// Clip length. Must match App's SAMPLE_SECS / useMirror's copy — the whole
+// clips library is a fixed 10s head of each source track, so the clip↔source
+// relationship is purely a function of the track's full duration.
+const SAMPLE_SECS = 10;
+
+function fmtDur(secs: number): string {
+  const s = Math.round(secs);
+  return `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, "0")}`;
+}
+
+/** `h:mm:ss` once past an hour (for scope totals), else `m:ss`. */
+function fmtDurLong(secs: number): string {
+  const s = Math.round(secs);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = (s % 60).toString().padStart(2, "0");
+  return h > 0 ? `${h}:${m.toString().padStart(2, "0")}:${sec}` : `${m}:${sec}`;
+}
+
+/** Perceptual bar width. A clip is a small fraction of its track (a 10s clip of
+ *  a 4-min track is ~4%), nearly invisible on a linear bar. sqrt lifts the low
+ *  end so small samples register, while keeping 0→empty, 1→full and staying
+ *  monotonic — deliberately representative, not true-to-scale. A small floor
+ *  stops a present clip ever vanishing. Tune the exponent to taste; works for
+ *  the whole envisaged clip range (5s–60s), not just the fixed 10s. */
+function barWidth(frac: number): string {
+  const w = Math.min(Math.max(Math.sqrt(frac), 0.04), 1);
+  return `${Math.round(w * 100)}%`;
+}
+
+/** Per-track clip-coverage bar: the fixed 10s clip as a fraction of the full
+ *  source-track duration (fraction fill — all bars equal width — so "how much
+ *  of the track is sampled" reads at a glance). Green fill matches ntree's
+ *  clip=green language. Empty when the clip is absent (fill 0) or the duration
+ *  is unknown (pre-duration report — rescan to populate). */
+function ClipBar({ duration, sampled }: { duration: number | null; sampled: boolean }) {
+  if (!duration || duration <= 0) {
+    return (
+      <span className="flex items-center" title="No duration — rescan to populate">
+        <span className="flex-1 h-1.5 rounded-full bg-surface/40" />
+      </span>
+    );
+  }
+  const frac = Math.min(SAMPLE_SECS, duration) / duration;
+  const title = !sampled
+    ? `Not sampled · ${fmtDur(duration)}`
+    : duration <= SAMPLE_SECS
+      ? `Full track sampled · ${fmtDur(duration)}`
+      : `${SAMPLE_SECS}s clip of ${fmtDur(duration)}`;
+  return (
+    <span className="flex items-center" title={title}>
+      <span className="relative flex-1 h-1.5 rounded-full bg-surface/60 overflow-hidden">
+        <span
+          className="absolute inset-y-0 left-0 rounded-full bg-ok"
+          style={{ width: sampled ? barWidth(frac) : 0 }}
+        />
+      </span>
+    </span>
+  );
+}
+
+/** Aggregate clip coverage of a scope by duration: total sampled seconds (10s
+ *  per sampled track, capped at the track's own length) ÷ total known duration.
+ *  Null when no track carries a duration yet (so the rollup bar hides). */
+function coverageOf(
+  tracks: ScanRow[],
+  hasSample: (r: ScanRow) => boolean,
+): { frac: number; sampledSecs: number; totalSecs: number } | null {
+  let sampled = 0;
+  let total = 0;
+  for (const t of tracks) {
+    if (t.durationSecs == null || t.durationSecs <= 0) continue;
+    total += t.durationSecs;
+    if (hasSample(t)) sampled += Math.min(SAMPLE_SECS, t.durationSecs);
+  }
+  return total > 0
+    ? { frac: sampled / total, sampledSecs: sampled, totalSecs: total }
+    : null;
+}
+
+/** Compact aggregate coverage bar for an artist/album header row. Same
+ *  perceptual scale as the per-track bar; true durations live in the tooltip. */
+function CoverageBar({
+  cov,
+}: {
+  cov: { frac: number; sampledSecs: number; totalSecs: number } | null;
+}) {
+  if (cov == null) return null;
+  return (
+    <span
+      className="flex items-center shrink-0 w-12"
+      title={`Clip coverage · ${fmtDurLong(cov.sampledSecs)} sampled of ${fmtDurLong(cov.totalSecs)}`}
+    >
+      <span className="relative flex-1 h-1 rounded-full bg-surface/60 overflow-hidden">
+        <span
+          className="absolute inset-y-0 left-0 rounded-full bg-ok/80"
+          style={{ width: barWidth(cov.frac) }}
+        />
+      </span>
+    </span>
+  );
+}
+
 interface TrackRow extends ScanRow {
   _artist: string;
   _album: string;
@@ -282,6 +385,7 @@ export function LibraryTree({
             published: publishedHere,
             dot: artistDot,
           } = scopeStatus(allArtistTracks, hasSample, isPublished);
+          const artistCoverage = coverageOf(allArtistTracks, hasSample);
           const artistDotTitle =
             publishedHere > 0
               ? `${publishedHere} of ${allArtistTracks.length} clips published to Nostr by this app (kind:1063) · click to (re)sample`
@@ -312,6 +416,7 @@ export function LibraryTree({
                         <span className="text-[10px]">{artist.videoCount}</span>
                       </span>
                     )}
+                    <CoverageBar cov={artistCoverage} />
                     <ReleaseTree n={artist.albums.length} />
                   </span>
                 </button>
@@ -340,6 +445,7 @@ export function LibraryTree({
                     published: alPublished,
                     dot: alDot,
                   } = scopeStatus(albumSampleable, hasSample, isPublished);
+                  const albumCoverage = coverageOf(albumSampleable, hasSample);
                   const alDotTitle =
                     alPublished > 0
                       ? `${alPublished} of ${album.tracks.length} clips published to Nostr by this app (kind:1063) · click to (re)sample`
@@ -370,6 +476,7 @@ export function LibraryTree({
                                 )}
                               </span>
                             )}
+                            <CoverageBar cov={albumCoverage} />
                             <LeafDots
                               n={album.tracks.length}
                               maxCols={8}
@@ -407,7 +514,7 @@ export function LibraryTree({
                               onDoubleClick={() => openTrackFolder(t)}
                               title={t.path}
                               className={cn(
-                                "grid grid-cols-[16px_1fr_120px_90px_70px] gap-2 items-center",
+                                "grid grid-cols-[16px_1fr_120px_90px_70px_96px] gap-2 items-center",
                                 "pl-12 pr-3 py-0.5 text-xs font-mono cursor-pointer",
                                 "hover:bg-surface/40",
                                 i % 2 === 1 && "bg-bg/40",
@@ -454,6 +561,7 @@ export function LibraryTree({
                               <span className="text-right text-muted">
                                 {t.sr ? `${t.sr.toLocaleString()} Hz` : ""}
                               </span>
+                              <ClipBar duration={t.durationSecs} sampled={sampled} />
                             </div>
                           );
                         })}
@@ -468,7 +576,7 @@ export function LibraryTree({
                             onDoubleClick={() => openTrackFolder(v)}
                             title={`${v.path} · video (not analysed)`}
                             className={cn(
-                              "grid grid-cols-[16px_1fr_120px_90px_70px] gap-2 items-center",
+                              "grid grid-cols-[16px_1fr_120px_90px_70px_96px] gap-2 items-center",
                               "pl-12 pr-3 py-0.5 text-xs font-mono",
                               "hover:bg-surface/40 text-fg/70",
                             )}
@@ -480,6 +588,7 @@ export function LibraryTree({
                             <span className="text-mauve">video</span>
                             <span className="text-right text-muted" />
                             <span className="text-right text-muted" />
+                            <ClipBar duration={v.durationSecs} sampled={hasSample(v)} />
                           </div>
                         ))}
                     </div>

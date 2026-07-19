@@ -17,6 +17,24 @@ ndisc's `published.json` manifest, and `~/.config/ndisc-suite/roots.json`).
 > The **0.2.7** entry covers a six-week, 37-commit stretch that was tagged only
 > at the end of it.
 
+## 0.3.1 — unreleased
+
+### Clip-coverage bars in the Library
+- The scan now records each track's **duration** — added to the existing
+  ffprobe call (`format=duration`, a header read, no extra cost). Reports
+  written by older builds load unchanged and simply show no bar until the next
+  re-scan.
+- Every audio track row gains a **clip-coverage bar**: the fixed 10 s clip as a
+  fraction of the full source-track duration, on a perceptual (sqrt) scale so
+  the common 3–4 % range stays visible (tracks ≤ 10 s read as fully sampled).
+  Album and artist rows carry a duration-weighted **rollup**. No `%` labels —
+  the true durations ride in the tooltip.
+
+*Forward note:* the bar assumes the constant 10 s clip (`SAMPLE_SECS`). When
+variable-length sampling lands, per-track clip length should be read from the
+actual `.<secs>s.flac` clip rather than the constant — `nsmpl` already probes
+per-clip length this way.
+
 ## 0.3.0 — 2026-07-14
 
 ### Monochrome theme — and it is now the default

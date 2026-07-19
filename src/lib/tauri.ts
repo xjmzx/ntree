@@ -30,6 +30,9 @@ export interface ScanRow {
   /** bits/sec, from the container — the honest measure of a lossy file. */
   bitRate: number | null;
   channels: number | null;
+  /** Full track duration in seconds; null on pre-duration reports or files
+   *  ffprobe couldn't read. Powers the clip-coverage bar (10s clip ÷ this). */
+  durationSecs: number | null;
 }
 
 export interface ScanReport {

@@ -122,6 +122,11 @@ struct ScanRow {
     bit_rate: Option<u32>,
     #[serde(default)]
     channels: Option<u8>,
+    /// Full source-track duration in seconds (container `format=duration`).
+    /// Powers the clip-coverage bar (10s clip ÷ this). Absent on pre-duration
+    /// reports and on files ffprobe couldn't read — the bar just doesn't render.
+    #[serde(default)]
+    duration_secs: Option<f64>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -273,6 +278,7 @@ enum FfprobeOutcome {
         bit_depth: Option<u32>,
         bit_rate: Option<u32>,
         channels: Option<u8>,
+        duration_secs: Option<f64>,
     },
     TimedOut,
     Failed,
@@ -292,7 +298,7 @@ fn ffprobe_fields(path: &Path) -> FfprobeOutcome {
         // rate MP3 cannot even produce. Same mistake as mapping the artwork
         // into a clip: ask for the audio, not the file.
         "-show_entries",
-        "stream=codec_name,sample_rate,bits_per_raw_sample,channels,bit_rate:format=bit_rate",
+        "stream=codec_name,sample_rate,bits_per_raw_sample,channels,bit_rate:format=bit_rate,duration",
         // KEYED output. ffprobe emits fields in ITS order, not the requested
         // one (probe_video learned this the hard way), so positional parsing is
         // a trap waiting for the first file that omits a field.
@@ -327,6 +333,7 @@ fn ffprobe_fields(path: &Path) -> FfprobeOutcome {
                 bit_depth: map.get("bits_per_raw_sample").and_then(|s| s.parse().ok()),
                 bit_rate: map.get("bit_rate").and_then(|s| s.parse().ok()),
                 channels: map.get("channels").and_then(|s| s.parse().ok()),
+                duration_secs: map.get("duration").and_then(|s| s.parse().ok()),
             }
         }
         RunOutcome::TimedOut => FfprobeOutcome::TimedOut,
@@ -410,9 +417,9 @@ fn classify(path: &Path, vol_re: &Regex) -> ScanRow {
             ..Default::default()
         };
     }
-    let (codec, sr, bit_depth, bit_rate, channels) = match ffprobe_fields(path) {
-        FfprobeOutcome::Ok { codec, sr, bit_depth, bit_rate, channels } => {
-            (codec, sr, bit_depth, bit_rate, channels)
+    let (codec, sr, bit_depth, bit_rate, channels, duration_secs) = match ffprobe_fields(path) {
+        FfprobeOutcome::Ok { codec, sr, bit_depth, bit_rate, channels, duration_secs } => {
+            (codec, sr, bit_depth, bit_rate, channels, duration_secs)
         }
         FfprobeOutcome::TimedOut => {
             return ScanRow {
@@ -463,6 +470,7 @@ fn classify(path: &Path, vol_re: &Regex) -> ScanRow {
             bit_depth,
             bit_rate,
             channels,
+            duration_secs,
         };
     }
 
@@ -478,6 +486,7 @@ fn classify(path: &Path, vol_re: &Regex) -> ScanRow {
             bit_depth,
             bit_rate,
             channels,
+            duration_secs,
         };
     }
     let Some(sr_val) = sr else {
@@ -491,6 +500,7 @@ fn classify(path: &Path, vol_re: &Regex) -> ScanRow {
             bit_depth,
             bit_rate,
             channels,
+            duration_secs,
         };
     };
 
@@ -515,6 +525,7 @@ fn classify(path: &Path, vol_re: &Regex) -> ScanRow {
                 bit_depth,
                 bit_rate,
                 channels,
+                duration_secs,
             };
         }
         PeakOutcome::Failed => {
@@ -528,6 +539,7 @@ fn classify(path: &Path, vol_re: &Regex) -> ScanRow {
                 bit_depth,
                 bit_rate,
                 channels,
+                duration_secs,
             };
         }
     };
@@ -550,6 +562,7 @@ fn classify(path: &Path, vol_re: &Regex) -> ScanRow {
         bit_depth,
         bit_rate,
         channels,
+        duration_secs,
     }
 }
 

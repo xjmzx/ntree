@@ -18,7 +18,7 @@ and maintains a **mirror** of the library — a technician's-bench companion to
 - Maintains a **mirror tree** of the library (privileged copy via `pkexec`).
 - Three-column **[Sample · Library · Radio]** layout with collapse-flanks;
   recognises and marks video via the shared `VIDEO_EXTS`.
-- Reads the shared **feed** and lets you **react** to releases.
+- Reads a **kind:1063** clip feed and lets you **react** (kind 7).
 
 ## Tech stack & build
 Tauri 2 · React + Vite + TypeScript · Rust backend · filesystem-oriented (no
@@ -29,13 +29,14 @@ SQLite) · OS keyring for the signing key · `nostr-sdk`. `make dev` /
 - **References `ndisc` releases**: clips are cut from library files that map back
   to catalogued releases (provenance — a growing near-term goal is to make each
   published clip explicitly reference its source release).
-- **Reads** the `feed.v1` channel and posts **reactions** (kind 7) using the
-  shared `lib/rating.ts` aggregation, consistent with the rest of the suite.
+- **Reads** a **kind:1063** clip feed and posts **reactions** (kind 7) using
+  the shared `lib/rating.ts` aggregation, consistent with the rest of the suite.
 - Shares the leaf/foliage vocabulary with `nsmpl` (leaves = clips/provenance).
 
 ## Nostr surface
 Publishes **NIP-94 file metadata (kind 1063)** for clips and **reactions
-(kind 7)**; reads `feed.v1` (31239). Signs with a local `nsec` in the OS keyring.
+(kind 7)**; reads a **kind:1063** clip feed. Signs with a local `nsec` in the
+OS keyring.
 
 ## Styling notes
 Shared design language. Three-column collapse-flanks layout, squared boxes,
