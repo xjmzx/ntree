@@ -33,7 +33,13 @@ export interface ScanRow {
   /** Full track duration in seconds; null on pre-duration reports or files
    *  ffprobe couldn't read. Powers the clip-coverage bar (10s clip ÷ this). */
   durationSecs: number | null;
+  /** Hi-res verification — null unless the file claims > 48 kHz. Orthogonal to
+   *  `verdict`: a file can be honestly LOSSLESS and still be an UPSCALED fake. */
+  hires: HiRes | null;
 }
+
+/** Whether a file's claimed high sample rate is carrying anything. */
+export type HiRes = "HI-RES" | "UPSCALED" | "UNCERTAIN";
 
 export interface ScanReport {
   root: string;

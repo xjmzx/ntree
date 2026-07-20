@@ -33,6 +33,19 @@ const HIGHPASS_HZ: u32 = 16_000;
 const LOSSY_DB: f32 = -65.0;
 const LOSSLESS_DB: f32 = -35.0;
 const ANALYSIS_SECS: u32 = 30;
+
+// ---- hi-res verification ---------------------------------------------------
+// The spectral test above catches lossy-pretending-to-be-lossless. This catches
+// the other lie: a file that CLAIMS a high sample rate but was upsampled from a
+// 44.1/48 kHz source — bigger on disk with no more music in it. A real >48 kHz
+// transfer carries content above CD's 22.05 kHz ceiling; an upsample is
+// brick-walled there by the resampler's filter and reads as digital silence.
+// Thresholds calibrated against this library: genuine hi-res measured −18 to
+// −37 dB above the cutoff, so the bands sit well clear of that range.
+const HIRES_CUTOFF_HZ: u32 = 22_050; // CD ceiling — nothing above it survives 44.1k
+const HIRES_MIN_SR: u32 = 48_000; // only files claiming better than this are candidates
+const HIRES_GENUINE_DB: f32 = -50.0;
+const HIRES_UPSCALED_DB: f32 = -70.0;
 // Audio file extensions the scanner picks up. FLAC stays the focus
 // (spectral heuristic only runs on it); other formats are categorized
 // by codec name alone — no ffmpeg decode for lossy-by-design files.
@@ -93,6 +106,24 @@ enum Verdict {
     Unknown,
 }
 
+/// Hi-res verification result. Only set for files claiming > `HIRES_MIN_SR`;
+/// `None` on everything else (the vast majority) so the column stays quiet.
+/// Orthogonal to `Verdict` — a file can be honestly LOSSLESS and still be an
+/// UPSCALED fake, which is exactly the case the plain spectral test misses.
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
+enum HiRes {
+    /// Real content above 22.05 kHz — the extra rate is carrying something.
+    #[serde(rename = "HI-RES")]
+    Genuine,
+    /// Brick-walled at the CD ceiling — upsampled from 44.1/48 kHz. The bytes
+    /// are real, the resolution is not.
+    #[serde(rename = "UPSCALED")]
+    Upscaled,
+    /// Between the bands — quiet or heavily filtered material; review manually.
+    #[serde(rename = "UNCERTAIN")]
+    Uncertain,
+}
+
 #[derive(Serialize, Deserialize, Clone, Default)]
 // Existing fields are all single words, so this is backward-compatible with
 // reports already on disk; it only affects the new bit_depth/bit_rate.
@@ -127,6 +158,9 @@ struct ScanRow {
     /// reports and on files ffprobe couldn't read — the bar just doesn't render.
     #[serde(default)]
     duration_secs: Option<f64>,
+    /// Hi-res verification — `None` unless the file claims > 48 kHz. See HiRes.
+    #[serde(default)]
+    hires: Option<HiRes>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -453,6 +487,22 @@ fn classify(path: &Path, vol_re: &Regex) -> ScanRow {
         };
     };
 
+    // Hi-res verification. Costs one extra ffmpeg pass, so it runs ONLY for the
+    // few files that claim better than 48 kHz — everything else stays exactly as
+    // fast as before and reports `None`.
+    let hires = match sr {
+        Some(rate) if rate > HIRES_MIN_SR => {
+            match measure_high_band_peak(path, HIRES_CUTOFF_HZ, vol_re) {
+                PeakOutcome::Ok(p) if p >= HIRES_GENUINE_DB => Some(HiRes::Genuine),
+                PeakOutcome::Ok(p) if p <= HIRES_UPSCALED_DB => Some(HiRes::Upscaled),
+                PeakOutcome::Ok(_) => Some(HiRes::Uncertain),
+                // A failed/timed-out pass is not evidence of anything.
+                _ => None,
+            }
+        }
+        _ => None,
+    };
+
     // Non-FLAC codecs: categorise by codec name alone — no ffmpeg pass.
     if let Some(verdict) = codec_category(&codec) {
         let kind = match verdict {
@@ -471,6 +521,7 @@ fn classify(path: &Path, vol_re: &Regex) -> ScanRow {
             bit_rate,
             channels,
             duration_secs,
+            hires,
         };
     }
 
@@ -487,6 +538,7 @@ fn classify(path: &Path, vol_re: &Regex) -> ScanRow {
             bit_rate,
             channels,
             duration_secs,
+            hires,
         };
     }
     let Some(sr_val) = sr else {
@@ -501,6 +553,7 @@ fn classify(path: &Path, vol_re: &Regex) -> ScanRow {
             bit_rate,
             channels,
             duration_secs,
+            hires,
         };
     };
 
@@ -526,6 +579,7 @@ fn classify(path: &Path, vol_re: &Regex) -> ScanRow {
                 bit_rate,
                 channels,
                 duration_secs,
+                hires,
             };
         }
         PeakOutcome::Failed => {
@@ -540,6 +594,7 @@ fn classify(path: &Path, vol_re: &Regex) -> ScanRow {
                 bit_rate,
                 channels,
                 duration_secs,
+                hires,
             };
         }
     };
@@ -563,6 +618,7 @@ fn classify(path: &Path, vol_re: &Regex) -> ScanRow {
         bit_rate,
         channels,
         duration_secs,
+        hires,
     }
 }
 

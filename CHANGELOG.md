@@ -19,6 +19,20 @@ ndisc's `published.json` manifest, and `~/.config/ndisc-suite/roots.json`).
 
 ## 0.3.1 — unreleased
 
+### Hi-res verification
+- The spectral test catches lossy pretending to be lossless. This catches the
+  other lie: a file **claiming** a high sample rate that was upsampled from a
+  44.1/48 kHz source — bigger on disk with no more music in it. Real >48 kHz
+  material carries content above CD's 22.05 kHz ceiling; an upsample is
+  brick-walled there and reads as digital silence.
+- New badge beside the sample rate: **`HR`** genuine · **`UP`** upscaled ·
+  **`HR?`** inconclusive. Orthogonal to `verdict` — a file can be honestly
+  LOSSLESS *and* an upscaled fake, which the plain test would wave through.
+- Costs one extra ffmpeg pass, run **only** for files claiming > 48 kHz, so the
+  rest of the scan is unchanged. Thresholds calibrated against a real library
+  (genuine hi-res measured −18 to −37 dB above the cutoff), with a wide band
+  between −50 and −70 dB.
+
 ### Clip-coverage bars in the Library
 - The scan now records each track's **duration** — added to the existing
   ffprobe call (`format=duration`, a header read, no extra cost). Reports

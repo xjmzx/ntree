@@ -11,7 +11,27 @@ import {
 import { LeafDots, ReleaseTree } from "./LeafIcon";
 import { cn } from "../lib/cn";
 import { splitPath } from "../lib/paths";
-import { openFolder, type ScanRow, type Verdict } from "../lib/tauri";
+import { openFolder, type HiRes, type ScanRow, type Verdict } from "../lib/tauri";
+
+// Hi-res badge — sits beside the sample rate because it qualifies exactly that
+// claim: is the extra rate carrying music, or is it an upsample?
+const HIRES_LABEL: Record<HiRes, string> = {
+  "HI-RES": "HR",
+  UPSCALED: "UP",
+  UNCERTAIN: "HR?",
+};
+const HIRES_COLOR: Record<HiRes, string> = {
+  "HI-RES": "bg-ok/20 text-ok",
+  UPSCALED: "bg-alert/20 text-alert",
+  UNCERTAIN: "bg-warn/20 text-warn",
+};
+const HIRES_TITLE: Record<HiRes, string> = {
+  "HI-RES": "Genuine hi-res — real content above 22.05 kHz",
+  UPSCALED:
+    "Upscaled — brick-walled at the CD ceiling, so the extra sample rate carries no extra music (just a bigger file)",
+  UNCERTAIN:
+    "Inconclusive — quiet or heavily filtered above 22.05 kHz; review manually",
+};
 
 const VERDICT_COLOR: Record<Verdict, string> = {
   LOSSLESS: "text-ok",
@@ -514,7 +534,7 @@ export function LibraryTree({
                               onDoubleClick={() => openTrackFolder(t)}
                               title={t.path}
                               className={cn(
-                                "grid grid-cols-[16px_1fr_120px_90px_70px_96px] gap-2 items-center",
+                                "grid grid-cols-[16px_1fr_120px_90px_112px_96px] gap-2 items-center",
                                 "pl-12 pr-3 py-0.5 text-xs font-mono cursor-pointer",
                                 "hover:bg-surface/40",
                                 i % 2 === 1 && "bg-bg/40",
@@ -558,8 +578,19 @@ export function LibraryTree({
                               <span className="text-right text-muted">
                                 {t.peak !== null ? `${t.peak >= 0 ? "+" : ""}${t.peak.toFixed(1)} dB` : ""}
                               </span>
-                              <span className="text-right text-muted">
+                              <span className="flex items-center justify-end gap-1 text-muted">
                                 {t.sr ? `${t.sr.toLocaleString()} Hz` : ""}
+                                {t.hires && (
+                                  <span
+                                    title={HIRES_TITLE[t.hires]}
+                                    className={cn(
+                                      "shrink-0 px-1 rounded text-[9px] leading-tight",
+                                      HIRES_COLOR[t.hires],
+                                    )}
+                                  >
+                                    {HIRES_LABEL[t.hires]}
+                                  </span>
+                                )}
                               </span>
                               <ClipBar duration={t.durationSecs} sampled={sampled} />
                             </div>
@@ -576,7 +607,7 @@ export function LibraryTree({
                             onDoubleClick={() => openTrackFolder(v)}
                             title={`${v.path} · video (not analysed)`}
                             className={cn(
-                              "grid grid-cols-[16px_1fr_120px_90px_70px_96px] gap-2 items-center",
+                              "grid grid-cols-[16px_1fr_120px_90px_112px_96px] gap-2 items-center",
                               "pl-12 pr-3 py-0.5 text-xs font-mono",
                               "hover:bg-surface/40 text-fg/70",
                             )}
