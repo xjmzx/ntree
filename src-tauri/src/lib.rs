@@ -1555,10 +1555,29 @@ struct PublishedManifest {
 /// Read ndisc's published-release manifest from the suite-shared path.
 /// `Ok(None)` when it has never been exported — that is a normal state, not an
 /// error: the user just has not run "Export published manifest" in ndisc.
+
+/// The suite's shared directory — deliberately OUTSIDE each app's private data
+/// dir, because the whole point is that the other suite apps can read it. Every
+/// app must resolve this identically. Linux unchanged (installs depend on it);
+/// macOS shares it (nothing there uses it yet, so nothing to migrate). Windows
+/// uses LOCALAPPDATA not APPDATA on purpose: everything here is MACHINE-specific
+/// (roots.json points at local library paths), so it must not roam.
+fn suite_shared_dir() -> Option<PathBuf> {
+    #[cfg(windows)]
+    {
+        std::env::var_os("LOCALAPPDATA").map(|b| PathBuf::from(b).join("ndisc-suite"))
+    }
+    #[cfg(not(windows))]
+    {
+        std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/share/ndisc-suite"))
+    }
+}
+
 #[tauri::command]
 fn load_published_manifest() -> Result<Option<PublishedManifest>, String> {
-    let home = std::env::var("HOME").map_err(|e| format!("HOME: {e}"))?;
-    let path = PathBuf::from(home).join(".local/share/ndisc-suite/published.json");
+    let path = suite_shared_dir()
+        .ok_or("no home directory")?
+        .join("published.json");
     if !path.is_file() {
         return Ok(None);
     }
