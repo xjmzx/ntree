@@ -18,6 +18,7 @@ import { SimplePool } from "nostr-tools";
 import { cn } from "./lib/cn";
 import { ScannerControls } from "./components/ScannerControls";
 import { SamplerPanel } from "./components/SamplerPanel";
+import { CompressPanel } from "./components/CompressPanel";
 import { Filters, type FilterState } from "./components/Filters";
 import { LibraryTree } from "./components/LibraryTree";
 import { OperationOutput, type MirrorState } from "./components/OperationOutput";
@@ -36,11 +37,15 @@ import { FeedPanel } from "./components/FeedPanel";
 import { NostrPanel } from "./components/NostrPanel";
 import {
   cancelSample,
+  cancelCompress,
+  compressTracks,
   loadReport,
   onSampleProgress,
+  onCompressProgress,
   readAudioBytes,
   sampleTracks,
   scanSampleDest,
+  scanCompressDest,
   type SampleProgress,
   type ScanProgress,
   type ScanRow,
@@ -58,7 +63,12 @@ import {
 } from "./lib/nostr";
 import { usePersistedBool } from "./lib/usePersistedString";
 import { useLibrary } from "./lib/library";
-import { sampleDestPath, sourceSignature, uniquePairs } from "./lib/paths";
+import {
+  clipCompressItem,
+  sampleDestPath,
+  sourceSignature,
+  uniquePairs,
+} from "./lib/paths";
 
 const SAMPLE_SECS = 10;
 const SAMPLE_START_OFFSET_SECS = 30;
@@ -103,6 +113,8 @@ export default function App() {
     setRoot,
     workspaceDest,
     setWorkspaceDest,
+    compressDest,
+    setCompressDest,
     relays,
     libRoot,
   } = useLibrary();
@@ -160,6 +172,9 @@ export default function App() {
   // has always thrown it away, so "31 failed" was the whole story the user got
   // — unactionable, and it sent us guessing at ffmpeg from the outside.
   const [sampleErrors, setSampleErrors] = useState<string[]>([]);
+  // Same, for the Compress step — kept separate so its wording stays truthful
+  // ("could not be compressed", not "sampled").
+  const [compressErrors, setCompressErrors] = useState<string[]>([]);
   // How far the report has drifted from disk. Re-checked whenever the report
   // changes — on load, and after every scan — because those are exactly the
   // moments the answer can change. Cheap: a directory walk, no analysis.
@@ -174,6 +189,17 @@ export default function App() {
   const samplingActive = useRef(false);
   const sampleCancelledRef = useRef(false);
   const sampleUnlisten = useRef<(() => void) | null>(null);
+  // Compress dispatch — the sibling of the sampler, for the FLAC-clip -> Opus
+  // step. Independent in-flight state so it can run without touching sampling.
+  const [compressing, setCompressing] = useState<SampleProgress | null>(null);
+  const compressingActive = useRef(false);
+  const compressCancelledRef = useRef(false);
+  const compressUnlisten = useRef<(() => void) | null>(null);
+  // Clip signatures that already have a web-encoded (.opus) copy under the
+  // compress dest. Refreshed on dest change and after each compress batch.
+  const [compressedSignatures, setCompressedSignatures] = useState<Set<string>>(
+    () => new Set(),
+  );
   // Source signatures of already-sampled tracks under the workspace dest.
   // Refreshed when the dest changes and after each sample batch resolves.
   // LibraryTree uses it to tint the Scissors icons green on artist/album
@@ -341,6 +367,24 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspaceDest]);
 
+  async function refreshCompressedSignatures(dest: string) {
+    if (!dest.trim()) {
+      setCompressedSignatures(new Set());
+      return;
+    }
+    try {
+      const sigs = await scanCompressDest(dest.trim(), SAMPLE_SECS);
+      setCompressedSignatures(new Set(sigs));
+    } catch {
+      setCompressedSignatures(new Set());
+    }
+  }
+
+  useEffect(() => {
+    refreshCompressedSignatures(compressDest);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [compressDest]);
+
   // Apply + persist theme.
   useEffect(() => {
     const root = document.documentElement.classList;
@@ -497,6 +541,82 @@ export default function App() {
     setStatus({ text: "cancelling sample… waiting for in-flight files", tone: "muted" });
   }
 
+  // Compress step — re-encode every FLAC clip under the workspace dest to a
+  // web-optimised Opus copy under the compress dest. Idempotent (existing .opus
+  // skipped); mirrors runSample's progress/summary shape.
+  async function runCompress() {
+    if (compressingActive.current) {
+      setStatus({ text: "compress already running — stop it first", tone: "warn" });
+      return;
+    }
+    const flacRoot = workspaceDest.trim();
+    const opusRoot = compressDest.trim();
+    if (!flacRoot) {
+      setStatus({ text: "set a workspace (clip) destination first", tone: "warn" });
+      return;
+    }
+    if (!opusRoot) {
+      setStatus({ text: "set a compress destination first", tone: "warn" });
+      return;
+    }
+    const items = Array.from(sampledSignatures).map((sig) =>
+      clipCompressItem(sig, flacRoot, opusRoot, SAMPLE_SECS),
+    );
+    if (items.length === 0) {
+      setStatus({ text: "no clips to compress — sample some first", tone: "warn" });
+      return;
+    }
+
+    compressingActive.current = true;
+    compressCancelledRef.current = false;
+    setCompressErrors([]);
+    setCompressing({ done: 0, total: items.length, path: "", outcome: "Created" });
+    setStatus({
+      text: `compressing ${items.length.toLocaleString()} clips to Opus → ${opusRoot}`,
+      tone: "warn",
+    });
+
+    try {
+      const unlisten = await onCompressProgress((p) => setCompressing(p));
+      compressUnlisten.current = unlisten;
+      const result = await compressTracks(items);
+      setCompressErrors(result.errors ?? []);
+      const parts: string[] = [];
+      if (result.created > 0) parts.push(`${result.created.toLocaleString()} created`);
+      if (result.skipped > 0) parts.push(`${result.skipped.toLocaleString()} skipped`);
+      if (result.failed > 0) parts.push(`${result.failed.toLocaleString()} failed`);
+      if (result.timedOut > 0) parts.push(`${result.timedOut.toLocaleString()} timed out`);
+      if (result.cancelled > 0) parts.push(`${result.cancelled.toLocaleString()} cancelled`);
+      const summary = parts.join(" · ");
+      if (compressCancelledRef.current) {
+        setStatus({ text: `compress cancelled — ${summary}`, tone: "warn" });
+      } else if (result.failed + result.timedOut > 0) {
+        setStatus({ text: `compress done with errors — ${summary}`, tone: "alert" });
+      } else {
+        setStatus({ text: `compress complete — ${summary}`, tone: "ok" });
+      }
+    } catch (e) {
+      setStatus({ text: `compress failed: ${e}`, tone: "alert" });
+    } finally {
+      compressingActive.current = false;
+      setCompressing(null);
+      compressUnlisten.current?.();
+      compressUnlisten.current = null;
+      refreshCompressedSignatures(compressDest);
+    }
+  }
+
+  async function stopCompress() {
+    if (!compressingActive.current || compressCancelledRef.current) return;
+    compressCancelledRef.current = true;
+    try {
+      await cancelCompress();
+    } catch (e) {
+      console.warn("cancel_compress failed", e);
+    }
+    setStatus({ text: "cancelling compress… waiting for in-flight files", tone: "muted" });
+  }
+
   // Esc clears filter + search.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -580,6 +700,16 @@ export default function App() {
     [filteredRows, sampledSignatures, libRoot],
   );
 
+  // Compress operates on the FLAC clips on disk, not the library rows: total =
+  // every sampled clip, pending = those without a .opus web copy yet.
+  const pendingCompress = useMemo(() => {
+    let n = 0;
+    for (const sig of sampledSignatures) {
+      if (!compressedSignatures.has(sig)) n += 1;
+    }
+    return n;
+  }, [sampledSignatures, compressedSignatures]);
+
   const counts = useMemo(() => {
     const c: Record<Verdict, number> = {
       LOSSLESS: 0,
@@ -656,7 +786,9 @@ export default function App() {
             title={
               theme === "fizx"
                 ? "Theme: fizx.uk — click to switch to upleb.uk"
-                : "Theme: upleb.uk — click to switch to fizx.uk"
+                : theme === "upleb"
+                  ? "Theme: upleb.uk — click to switch to monochrome"
+                  : "Theme: monochrome — click to switch to fizx.uk"
             }
             aria-label="Switch colour theme"
             className="text-2xl font-bold tracking-tight leading-none shrink-0
@@ -813,7 +945,7 @@ export default function App() {
           title="Source & destination"
           icon={<ArrowRightLeft size={16} />}
         >
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div>
               <ScannerControls
                 bare
@@ -844,6 +976,18 @@ export default function App() {
                 }
                 onCancelSample={stopSample}
                 trailing={<MirrorControls mirror={mirror} dest={workspaceDest} />}
+              />
+            </div>
+            <div className="lg:border-l lg:border-surface/50 lg:pl-4">
+              <CompressPanel
+                bare
+                total={sampledSignatures.size}
+                pending={pendingCompress}
+                dest={compressDest}
+                setDest={setCompressDest}
+                compressing={compressing}
+                onCompress={runCompress}
+                onCancel={stopCompress}
               />
             </div>
           </div>
@@ -939,6 +1083,36 @@ export default function App() {
               </div>
               <button
                 onClick={() => setSampleErrors([])}
+                className="shrink-0 px-2 py-1 text-xs rounded bg-surface
+                           hover:bg-surfaceHover text-muted hover:text-fg"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Why the last compress run failed — same treatment as sampling. A
+            common cause is a root-owned compress dest (chown it to you). */}
+        {compressErrors.length > 0 && (
+          <div className="shrink-0 border border-alert/40 bg-alert/10 p-3">
+            <div className="flex items-start gap-2">
+              <AlertTriangle size={15} className="text-alert shrink-0 mt-0.5" />
+              <div className="min-w-0 flex-1">
+                <p className="text-alert text-sm font-medium">
+                  {compressErrors.length} file
+                  {compressErrors.length === 1 ? "" : "s"} could not be compressed
+                </p>
+                <ul className="mt-1.5 space-y-0.5 font-mono text-[11px] text-fg/75 max-h-40 overflow-y-auto">
+                  {compressErrors.map((e, i) => (
+                    <li key={i} className="break-all">
+                      {e}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+              <button
+                onClick={() => setCompressErrors([])}
                 className="shrink-0 px-2 py-1 text-xs rounded bg-surface
                            hover:bg-surfaceHover text-muted hover:text-fg"
               >

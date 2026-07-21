@@ -82,3 +82,24 @@ export function sampleDestPath(
   const base = srcPath.split("/").pop() || "sample";
   return `${dr}/${stripExt(base) + suffix}`;
 }
+
+/**
+ * From a clip signature (relpath with the `.<dur>s.flac` suffix stripped, as
+ * `scanSampleDest` returns) build a Compress item: the FLAC clip under
+ * `flacRoot` and its web-optimised Opus counterpart under `opusRoot`, mirroring
+ * the tree. `<flacRoot>/Artist/Album/track.10s.flac`
+ * → `<opusRoot>/Artist/Album/track.10s.opus`.
+ */
+export function clipCompressItem(
+  sig: string,
+  flacRoot: string,
+  opusRoot: string,
+  durationSecs: number,
+): { src: string; dest: string } {
+  const fr = flacRoot.replace(/\/+$/, "");
+  const or = opusRoot.replace(/\/+$/, "");
+  return {
+    src: `${fr}/${sig}.${durationSecs}s.flac`,
+    dest: `${or}/${sig}.${durationSecs}s.opus`,
+  };
+}

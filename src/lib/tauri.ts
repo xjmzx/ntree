@@ -289,6 +289,37 @@ export async function scanSampleDest(
 }
 
 /**
+ * Compress step — re-encode FLAC clips (`items[].src`) to web-optimised Opus
+ * (`items[].dest`). Reuses the SampleItem / SampleReport shapes; idempotent
+ * (existing dest skipped). Progress arrives on the "compress-progress" channel.
+ */
+export async function compressTracks(
+  items: SampleItem[],
+  workers?: number,
+): Promise<SampleReport> {
+  return invoke<SampleReport>("compress_tracks", {
+    items,
+    workers: workers ?? null,
+  });
+}
+
+export async function cancelCompress(): Promise<void> {
+  await invoke("cancel_compress");
+}
+
+/**
+ * Signatures of already web-encoded (`.<dur>s.opus`) clips under the compress
+ * dest — pair with `scanSampleDest` results to find which FLAC clips still need
+ * compressing. Empty list if the dest doesn't exist yet.
+ */
+export async function scanCompressDest(
+  destRoot: string,
+  durationSecs: number,
+): Promise<string[]> {
+  return invoke<string[]>("scan_compress_dest", { destRoot, durationSecs });
+}
+
+/**
  * Read raw bytes of a local audio file for playback via a Blob URL.
  * Bypasses asset:// (which throws NotSupportedError on this WebKit2GTK).
  * Returns the bytes as a number[] which the caller wraps in a Uint8Array.
@@ -420,6 +451,12 @@ export async function onSampleProgress(
   cb: (p: SampleProgress) => void,
 ): Promise<UnlistenFn> {
   return listen<SampleProgress>("sample-progress", (event) => cb(event.payload));
+}
+
+export async function onCompressProgress(
+  cb: (p: SampleProgress) => void,
+): Promise<UnlistenFn> {
+  return listen<SampleProgress>("compress-progress", (event) => cb(event.payload));
 }
 
 // ---- nostr reactions (kind:7 / kind:5 via Rust signing) ----

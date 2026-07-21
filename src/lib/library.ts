@@ -50,6 +50,7 @@ import type { ScanReport } from "./tauri";
 const DEFAULT_ROOT = "/data/music";
 const SCANNER_ROOT_KEY = "afqc-tauri.scanner.root";
 const WORKSPACE_DEST_KEY = "afqc-tauri.workspace.dest";
+const COMPRESS_DEST_KEY = "afqc-tauri.compress.dest";
 const PUBLISH_RELAY_KEY = "afqc-tauri.publish.relay";
 const DEFAULT_PUBLISH_RELAY = "wss://relay.fizx.uk";
 const SECONDARY_RELAYS = ["wss://nos.lol", "wss://relay.primal.net"];
@@ -64,6 +65,9 @@ export interface Library {
   /** Shared mirror/sample destination (persisted). */
   workspaceDest: string;
   setWorkspaceDest: (v: string) => void;
+  /** Web-optimised (Opus) compress destination (persisted). */
+  compressDest: string;
+  setCompressDest: (v: string) => void;
   /** Editable first relay (persisted); joined with the locked secondaries. */
   publishRelay: string;
   /** Effective relay trio used across reads/publish. */
@@ -79,6 +83,10 @@ export function useLibrary(): Library {
   const [root, setRoot] = usePersistedString(SCANNER_ROOT_KEY, DEFAULT_ROOT);
   const [workspaceDest, setWorkspaceDest] = usePersistedString(
     WORKSPACE_DEST_KEY,
+    "",
+  );
+  const [compressDest, setCompressDest] = usePersistedString(
+    COMPRESS_DEST_KEY,
     "",
   );
   const [publishRelay] = usePersistedString(
@@ -98,6 +106,8 @@ export function useLibrary(): Library {
     setRoot,
     workspaceDest,
     setWorkspaceDest,
+    compressDest,
+    setCompressDest,
     publishRelay,
     relays,
     libRoot,

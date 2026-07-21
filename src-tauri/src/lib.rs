@@ -200,6 +200,16 @@ impl SampleCancel {
     }
 }
 
+/// Sibling cancel flag for the Compress step — independent of Sample (and Scan)
+/// so the three can run and stop without interfering.
+struct CompressCancel(Arc<AtomicBool>);
+
+impl CompressCancel {
+    fn new() -> Self {
+        Self(Arc::new(AtomicBool::new(false)))
+    }
+}
+
 #[derive(Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 struct SampleItem {
@@ -1517,6 +1527,78 @@ fn sample_one(
     }
 }
 
+/// Opus VBR bitrate for the web-optimised clips. 96 kbps stereo is transparent
+/// enough for 10-second discovery clips at a small fraction of the FLAC size.
+const OPUS_BITRATE_KBPS: u32 = 96;
+
+/// Transcode one already-cut FLAC clip to a web-optimised Opus file. The clip is
+/// already trimmed and audio-only, so this is a straight re-encode — no `-ss`/`-t`.
+/// `-c:a libopus` at [`OPUS_BITRATE_KBPS`], VBR; Opus resamples to 48 kHz
+/// internally, so a hi-res FLAC clip is downsized to a web-appropriate rate for
+/// free. Idempotent: an existing dest is skipped, partial output from a failed
+/// run is removed. Mirrors `sample_one`'s outcome + error reporting exactly.
+fn compress_one(item: &SampleItem) -> (SampleOutcome, Option<String>) {
+    let src = Path::new(&item.src);
+    let dest = Path::new(&item.dest);
+
+    if dest.exists() {
+        return (SampleOutcome::Skipped, None);
+    }
+    if let Some(parent) = dest.parent() {
+        if let Err(e) = fs::create_dir_all(parent) {
+            return (
+                SampleOutcome::Failed,
+                Some(format!("could not create {}: {e}", parent.display())),
+            );
+        }
+    }
+
+    let bitrate = format!("{OPUS_BITRATE_KBPS}k");
+    let mut cmd = Command::new("ffmpeg");
+    cmd.args(["-nostdin", "-i"])
+        .arg(src)
+        // -vn: audio only. Clips carry no video, but stay defensive for the same
+        // reason as sample_one (broken embedded art aborting the whole encode).
+        // -ac 2: downmix to stereo. Web discovery clips want stereo anyway, and
+        // libopus rejects multichannel sources (e.g. a 5.1 FLAC) under the
+        // default mapping family — so this both web-optimises and fixes surround
+        // clips that would otherwise fail with "Invalid channel layout".
+        .args([
+            "-vn", "-ac", "2", "-c:a", "libopus", "-b:a", &bitrate, "-vbr", "on", "-y",
+        ])
+        .arg(dest);
+
+    match run_with_timeout(cmd, Duration::from_secs(FFMPEG_TIMEOUT_SECS)) {
+        RunOutcome::Ok(out) => {
+            if out.status.success() {
+                (SampleOutcome::Created, None)
+            } else {
+                let _ = fs::remove_file(dest);
+                let err = String::from_utf8_lossy(&out.stderr);
+                let last = err
+                    .lines()
+                    .rev()
+                    .find(|l| !l.trim().is_empty())
+                    .unwrap_or("no output")
+                    .trim()
+                    .to_string();
+                (SampleOutcome::Failed, Some(format!("ffmpeg: {last}")))
+            }
+        }
+        RunOutcome::TimedOut => {
+            let _ = fs::remove_file(dest);
+            (
+                SampleOutcome::TimedOut,
+                Some(format!("no response after {FFMPEG_TIMEOUT_SECS}s — killed")),
+            )
+        }
+        RunOutcome::Failed => (
+            SampleOutcome::Failed,
+            Some("could not run ffmpeg (is it installed?)".to_string()),
+        ),
+    }
+}
+
 /// Walk the workspace destination and enumerate already-sampled clips.
 /// Returns a list of "source signatures" — the relative path under
 /// `dest_root` with the `.<duration_secs>s.flac` suffix stripped. The
@@ -1599,6 +1681,56 @@ async fn scan_sample_dest(
             return Ok(Vec::new());
         }
         let suffix = format!(".{duration_secs}s.flac");
+        let mut sigs = Vec::new();
+        for entry in WalkDir::new(&root).into_iter().filter_map(|e| e.ok()) {
+            if !entry.file_type().is_file() {
+                continue;
+            }
+            let path = entry.path();
+            let name = match path.file_name().and_then(|n| n.to_str()) {
+                Some(n) => n,
+                None => continue,
+            };
+            if !name.ends_with(&suffix) {
+                continue;
+            }
+            let rel = match path.strip_prefix(&root) {
+                Ok(r) => r,
+                Err(_) => continue,
+            };
+            let parent = rel
+                .parent()
+                .map(|p| p.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            let stem = &name[..name.len() - suffix.len()];
+            let sig = if parent.is_empty() {
+                stem.to_string()
+            } else {
+                format!("{parent}/{stem}")
+            };
+            sigs.push(sig);
+        }
+        Ok(sigs)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Like `scan_sample_dest`, but for the Compress step: enumerate the already
+/// web-encoded `.<duration_secs>s.opus` clips under the compress dest, returning
+/// their signatures (relpath with the suffix stripped). Pair with the sampled
+/// signatures to find which FLAC clips still need compressing.
+#[tauri::command]
+async fn scan_compress_dest(
+    dest_root: String,
+    duration_secs: u32,
+) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || -> Result<Vec<String>, String> {
+        let root = PathBuf::from(&dest_root);
+        if !root.is_dir() {
+            return Ok(Vec::new());
+        }
+        let suffix = format!(".{duration_secs}s.opus");
         let mut sigs = Vec::new();
         for entry in WalkDir::new(&root).into_iter().filter_map(|e| e.ok()) {
             if !entry.file_type().is_file() {
@@ -1983,6 +2115,120 @@ fn sample_inner(
     for (item, (o, why)) in items.iter().zip(outcomes.iter()) {
         // The reason travels with the path — "N failed" on its own tells you
         // nothing you can act on.
+        let name = Path::new(&item.src)
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_else(|| item.src.clone());
+        match o {
+            SampleOutcome::Created => report.created += 1,
+            SampleOutcome::Skipped => report.skipped += 1,
+            SampleOutcome::Failed => {
+                report.failed += 1;
+                if report.errors.len() < ERROR_SAMPLE {
+                    report.errors.push(match why {
+                        Some(w) => format!("{name} — {w}"),
+                        None => name,
+                    });
+                }
+            }
+            SampleOutcome::TimedOut => {
+                report.timed_out += 1;
+                if report.errors.len() < ERROR_SAMPLE {
+                    report.errors.push(match why {
+                        Some(w) => format!("{name} — {w}"),
+                        None => format!("{name} — timed out"),
+                    });
+                }
+            }
+            SampleOutcome::Cancelled => report.cancelled += 1,
+        }
+    }
+
+    Ok(report)
+}
+
+// ---- Compress: FLAC clips -> web-optimised Opus -------------------------
+// A separate step from Sample (own dest, own cancel flag): re-encode the FLAC
+// clips under the workspace dest into `.opus` under the compress dest, mirroring
+// the tree. Reuses SampleItem / SampleOutcome / SampleProgress / SampleReport.
+
+#[tauri::command]
+async fn compress_tracks(
+    items: Vec<SampleItem>,
+    workers: Option<usize>,
+    app: AppHandle,
+    cancel: tauri::State<'_, CompressCancel>,
+) -> Result<SampleReport, String> {
+    let flag = cancel.0.clone();
+    flag.store(false, Ordering::Relaxed);
+    tauri::async_runtime::spawn_blocking(move || compress_inner(items, workers, app, flag))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn cancel_compress(cancel: tauri::State<CompressCancel>) {
+    cancel.0.store(true, Ordering::Relaxed);
+}
+
+/// Batch Opus-encode FLAC clips. Mirrors `sample_inner` (rayon pool, per-item
+/// progress, cancel flag) but calls `compress_one` and emits `compress-progress`.
+fn compress_inner(
+    items: Vec<SampleItem>,
+    workers: Option<usize>,
+    app: AppHandle,
+    cancel: Arc<AtomicBool>,
+) -> Result<SampleReport, String> {
+    let total = items.len();
+    if total == 0 {
+        return Err("no clips to compress".into());
+    }
+
+    let worker_count = workers
+        .or_else(|| available_parallelism().ok().map(|n| (n.get() / 2).max(2)))
+        .unwrap_or(2);
+
+    let pool = rayon::ThreadPoolBuilder::new()
+        .num_threads(worker_count)
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let done = AtomicUsize::new(0);
+
+    let outcomes: Vec<(SampleOutcome, Option<String>)> = pool.install(|| {
+        items
+            .par_iter()
+            .map(|item| {
+                let (outcome, why) = if cancel.load(Ordering::Relaxed) {
+                    (SampleOutcome::Cancelled, None)
+                } else {
+                    compress_one(item)
+                };
+                let d = done.fetch_add(1, Ordering::Relaxed) + 1;
+                let _ = app.emit(
+                    "compress-progress",
+                    SampleProgress {
+                        done: d,
+                        total,
+                        path: item.src.clone(),
+                        outcome,
+                    },
+                );
+                (outcome, why)
+            })
+            .collect()
+    });
+
+    let mut report = SampleReport {
+        total,
+        created: 0,
+        skipped: 0,
+        failed: 0,
+        timed_out: 0,
+        cancelled: 0,
+        errors: Vec::new(),
+    };
+    for (item, (o, why)) in items.iter().zip(outcomes.iter()) {
         let name = Path::new(&item.src)
             .file_name()
             .map(|n| n.to_string_lossy().into_owned())
@@ -2480,6 +2726,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(ScanCancel::new())
         .manage(SampleCancel::new())
+        .manage(CompressCancel::new())
         .manage(NormalizeCancel::new())
         .invoke_handler(tauri::generate_handler![
             scan_library,
@@ -2487,6 +2734,9 @@ pub fn run() {
             sample_tracks,
             cancel_sample,
             scan_sample_dest,
+            compress_tracks,
+            cancel_compress,
+            scan_compress_dest,
             load_published_manifest,
             list_dest_folders,
             trash_dest_folder,
