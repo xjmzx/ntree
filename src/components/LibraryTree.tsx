@@ -5,6 +5,7 @@ import {
   ChevronsDownUp,
   ChevronsUpDown,
   Film,
+  Globe,
   Pause,
   Play,
 } from "lucide-react";
@@ -97,7 +98,7 @@ function ClipBar({ duration, sampled }: { duration: number | null; sampled: bool
       : `${SAMPLE_SECS}s clip of ${fmtDur(duration)}`;
   return (
     <span className="flex items-center" title={title}>
-      <span className="relative flex-1 h-1.5 rounded-full bg-surface/60 overflow-hidden">
+      <span className="relative flex-1 h-1.5 rounded-full bg-opus/15 overflow-hidden">
         <span
           className="absolute inset-y-0 left-0 rounded-full bg-medium"
           style={{ width: sampled ? barWidth(frac) : 0 }}
@@ -151,7 +152,7 @@ function TrackTimeline({
           const r = e.currentTarget.getBoundingClientRect();
           onSeek((e.clientX - r.left) / Math.max(1, r.width));
         }}
-        className="relative flex-1 h-2 rounded-full bg-surface/60 overflow-hidden cursor-pointer"
+        className="relative flex-1 h-2 rounded-full bg-opus/15 overflow-hidden cursor-pointer"
       >
         {sampled && (
           <span
@@ -202,7 +203,7 @@ function CoverageBar({
       className="flex items-center shrink-0 w-12"
       title={`Clip coverage · ${fmtDurLong(cov.sampledSecs)} sampled of ${fmtDurLong(cov.totalSecs)}`}
     >
-      <span className="relative flex-1 h-1 rounded-full bg-surface/60 overflow-hidden">
+      <span className="relative flex-1 h-1 rounded-full bg-opus/15 overflow-hidden">
         <span
           className="absolute inset-y-0 left-0 rounded-full bg-medium/80"
           style={{ width: barWidth(cov.frac) }}
@@ -359,8 +360,12 @@ interface LibraryTreeProps {
    * per-track rows; matches the keys `hasSample` uses.
    */
   playingSig: string | null;
-  /** Toggle play/stop for a row's sampled clip. */
-  onPlaySample: (row: ScanRow) => void;
+  /** True when the playing sample is the Opus web copy (vs the FLAC clip). */
+  playingIsOpus: boolean;
+  /** Toggle play/stop for a row's sample — FLAC clip, or its Opus copy. */
+  onPlaySample: (row: ScanRow, opus?: boolean) => void;
+  /** Whether a row has an Opus web copy on disk (compress dest). */
+  hasOpus: (row: ScanRow) => boolean;
   /** Source-signature of the row whose FULL track is playing (timeline bar). */
   srcPlayingSig: string | null;
   /** Playhead position (0..1) of the currently-playing source track. */
@@ -385,7 +390,9 @@ export function LibraryTree({
   hasSample,
   isPublished,
   playingSig,
+  playingIsOpus,
   onPlaySample,
+  hasOpus,
   srcPlayingSig,
   srcPlayFrac,
   onSeekSource,
@@ -616,8 +623,13 @@ export function LibraryTree({
                       {alOpen &&
                         album.tracks.map((t, i) => {
                           const sampled = hasSample(t);
-                          const isPlaying = sampled && playingSig === signatureOf(t);
-                          const selected = selectedSig === signatureOf(t);
+                          const sig = signatureOf(t);
+                          const onOpus = hasOpus(t);
+                          const isClipPlaying =
+                            sampled && playingSig === sig && !playingIsOpus;
+                          const isOpusPlaying =
+                            onOpus && playingSig === sig && playingIsOpus;
+                          const selected = selectedSig === sig;
                           return (
                             <div
                               key={t.path}
@@ -625,7 +637,7 @@ export function LibraryTree({
                               onDoubleClick={() => openTrackFolder(t)}
                               title={t.path}
                               className={cn(
-                                "grid grid-cols-[16px_1fr_120px_90px_112px_96px] gap-2 items-center",
+                                "grid grid-cols-[16px_1fr_120px_90px_112px_56px_96px] gap-2 items-center",
                                 "pl-12 pr-3 text-xs font-mono cursor-pointer",
                                 D.track,
                                 "hover:bg-surface/40",
@@ -641,22 +653,22 @@ export function LibraryTree({
                                     onPlaySample(t);
                                   }}
                                   title={
-                                    isPlaying
+                                    isClipPlaying
                                       ? "Stop playback"
                                       : "Play 10s sample"
                                   }
                                   aria-label={
-                                    isPlaying
+                                    isClipPlaying
                                       ? `Stop playback of ${t._track}`
                                       : `Play sample of ${t._track}`
                                   }
                                   className={cn(
                                     "flex items-center justify-center rounded",
                                     "hover:text-accent",
-                                    isPlaying ? "text-mauve" : "text-medium",
+                                    isClipPlaying ? "text-mauve" : "text-medium",
                                   )}
                                 >
-                                  {isPlaying ? (
+                                  {isClipPlaying ? (
                                     <Pause size={11} />
                                   ) : (
                                     <Play size={11} />
@@ -684,10 +696,44 @@ export function LibraryTree({
                                   </span>
                                 )}
                               </span>
+                              {/* Opus web-copy audition — the third type-view
+                                  (source = the bar, clip = the ▶, opus = here).
+                                  Shown only when the compressed copy exists. */}
+                              {onOpus ? (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    onPlaySample(t, true);
+                                  }}
+                                  title={
+                                    isOpusPlaying
+                                      ? "Stop Opus web copy"
+                                      : "Play the Opus web copy"
+                                  }
+                                  aria-label={
+                                    isOpusPlaying
+                                      ? `Stop Opus of ${t._track}`
+                                      : `Play Opus copy of ${t._track}`
+                                  }
+                                  className={cn(
+                                    "inline-flex items-center gap-1 px-1.5 py-0.5 rounded",
+                                    "text-[10px] leading-none transition-colors",
+                                    isOpusPlaying
+                                      ? "bg-opus text-bg"
+                                      : "bg-opus/15 text-opus hover:bg-opus/25",
+                                  )}
+                                >
+                                  <Globe size={10} className="shrink-0" />
+                                  opus
+                                </button>
+                              ) : (
+                                <span aria-hidden className="block" />
+                              )}
                               <TrackTimeline
                                 duration={t.durationSecs}
                                 sampled={sampled}
-                                playing={srcPlayingSig === signatureOf(t)}
+                                playing={srcPlayingSig === sig}
                                 playFrac={srcPlayFrac}
                                 onSeek={(f) => onSeekSource(t, f)}
                               />
@@ -705,7 +751,7 @@ export function LibraryTree({
                             onDoubleClick={() => openTrackFolder(v)}
                             title={`${v.path} · video (not analysed)`}
                             className={cn(
-                              "grid grid-cols-[16px_1fr_120px_90px_112px_96px] gap-2 items-center",
+                              "grid grid-cols-[16px_1fr_120px_90px_112px_56px_96px] gap-2 items-center",
                               "pl-12 pr-3 text-xs font-mono",
                               D.track,
                               "hover:bg-surface/40 text-fg/70",
@@ -718,6 +764,9 @@ export function LibraryTree({
                             <span className="text-mauve">video</span>
                             <span className="text-right text-muted" />
                             <span className="text-right text-muted" />
+                            {/* no Opus for video — empty cell keeps the columns
+                                aligned with the audio track rows. */}
+                            <span aria-hidden className="block w-4 h-4" />
                             <ClipBar duration={v.durationSecs} sampled={hasSample(v)} />
                           </div>
                         ))}

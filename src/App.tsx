@@ -313,6 +313,9 @@ export default function App() {
   const [srcPlay, setSrcPlay] = useState<{ sig: string; frac: number } | null>(
     null,
   );
+  // Which sample format is playing — the FLAC clip, or its Opus web copy — so
+  // the row lights the right control.
+  const [playingIsOpus, setPlayingIsOpus] = useState(false);
 
   function clearAudio() {
     if (audioRef.current) {
@@ -331,22 +334,28 @@ export default function App() {
     }
   }
 
-  async function playSample(row: ScanRow) {
+  // Play a row's 10s sample — the FLAC clip (default) or its Opus web copy
+  // (`opus`). Toggling the same row+format stops; a different format switches.
+  async function playSample(row: ScanRow, opus = false) {
     const sig = sourceSignature(row.path, libRoot);
-    if (playingSig === sig) {
+    if (playingSig === sig && playingIsOpus === opus) {
       clearAudio();
       setPlayingSig(null);
       return;
     }
     clearAudio();
     setSrcPlay(null); // starting a clip stops any full-track playback
-    const destPath = sampleDestPath(row.path, libRoot, workspaceDest, SAMPLE_SECS);
+    const destPath = opus
+      ? `${compressDest.replace(/\/+$/, "")}/${sig}.${SAMPLE_SECS}s.opus`
+      : sampleDestPath(row.path, libRoot, workspaceDest, SAMPLE_SECS);
     try {
       const bytes = await readAudioBytes(destPath);
       // Cast: Uint8Array.buffer is `ArrayBufferLike` in modern lib.dom.d.ts
       // (could be SharedArrayBuffer in theory); Blob's signature wants
       // ArrayBuffer specifically. We know it's plain ArrayBuffer here.
-      const blob = new Blob([bytes.buffer as ArrayBuffer], { type: "audio/flac" });
+      const blob = new Blob([bytes.buffer as ArrayBuffer], {
+        type: opus ? "audio/ogg" : "audio/flac",
+      });
       const url = URL.createObjectURL(blob);
       audioUrlRef.current = url;
       const audio = audioRef.current ?? new Audio();
@@ -362,6 +371,7 @@ export default function App() {
       };
       audioRef.current = audio;
       setPlayingSig(sig);
+      setPlayingIsOpus(opus);
       await audio.play();
     } catch (e) {
       setPlayingSig((p) => (p === sig ? null : p));
@@ -1315,7 +1325,11 @@ export default function App() {
                 publishedSignatures.has(sourceSignature(row.path, libRoot))
               }
               playingSig={playingSig}
+              playingIsOpus={playingIsOpus}
               onPlaySample={playSample}
+              hasOpus={(row) =>
+                compressedSignatures.has(sourceSignature(row.path, libRoot))
+              }
               srcPlayingSig={srcPlay?.sig ?? null}
               srcPlayFrac={srcPlay?.frac ?? 0}
               onSeekSource={playSourceAt}

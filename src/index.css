@@ -15,6 +15,9 @@
   --c-muted: 107 122 141;
   --c-accent: 122 240 205;
   --c-digital: 125 211 252;
+  /* Opus format identity — a stable blue in EVERY theme (like a verdict, it is
+     information, not decoration), so the opus audition reads distinctly. */
+  --c-opus: 96 165 250;
   --c-ok: 74 222 128;
   /* Neutral leaf / coverage mark — green here, GREY in the mono theme (below),
      mirroring ndisc's --c-medium. The decorative track/release presence dots and
@@ -46,6 +49,7 @@
   --c-muted: 107 122 141;
   --c-accent: 255 182 158;
   --c-digital: 255 120 73;
+  --c-opus: 96 165 250;
   --c-ok: 74 222 128;
   /* same leaf green as :root — the colour themes keep it green; only mono greys it */
   --c-medium: 74 222 128;
@@ -144,5 +148,6 @@ select option:checked {
   --c-medium: 210 210 216;
   --c-mauve: 198 198 204;
   --c-digital: 152 152 159;
+  --c-opus: 96 165 250;
   --c-auburn: 150 150 156;
 }
