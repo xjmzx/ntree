@@ -45,6 +45,9 @@ const VERDICT_COLOR: Record<Verdict, string> = {
 // clips library is a fixed 10s head of each source track, so the clip↔source
 // relationship is purely a function of the track's full duration.
 const SAMPLE_SECS = 10;
+// Where in the source track the sample is taken from — must match App's
+// SAMPLE_START_OFFSET_SECS. Drives the sample region's position on the timeline.
+const SAMPLE_START_OFFSET_SECS = 30;
 
 function fmtDur(secs: number): string {
   const s = Math.round(secs);
@@ -99,6 +102,69 @@ function ClipBar({ duration, sampled }: { duration: number | null; sampled: bool
           className="absolute inset-y-0 left-0 rounded-full bg-medium"
           style={{ width: sampled ? barWidth(frac) : 0 }}
         />
+      </span>
+    </span>
+  );
+}
+
+/** Interactive track timeline: the whole bar is the FULL source-track duration;
+ *  the 10s sample is a marked region at its true offset (floored to a visible
+ *  width so a short slice of a long track still registers). Click to play / seek
+ *  the source; a playhead tracks live position. This is the play/navigate
+ *  surface — the sample reads as a slice of a track the user knows. */
+function TrackTimeline({
+  duration,
+  sampled,
+  playing,
+  playFrac,
+  onSeek,
+}: {
+  duration: number | null;
+  sampled: boolean;
+  playing: boolean;
+  playFrac: number;
+  onSeek: (frac: number) => void;
+}) {
+  if (!duration || duration <= 0) {
+    return (
+      <span className="flex items-center" title="No duration — rescan to populate">
+        <span className="flex-1 h-2 rounded-full bg-surface/40" />
+      </span>
+    );
+  }
+  // ≥6% floor so a 10s slice of a multi-minute track never shrinks to a sliver.
+  const MIN_REGION = 0.06;
+  const clipLen = Math.min(SAMPLE_SECS, duration);
+  const startFrac =
+    duration > SAMPLE_START_OFFSET_SECS ? SAMPLE_START_OFFSET_SECS / duration : 0;
+  const width = Math.max(clipLen / duration, MIN_REGION);
+  const left = Math.min(startFrac, 1 - width); // keep the floored region on-bar
+  const title = sampled
+    ? `${SAMPLE_SECS}s clip at ${fmtDur(SAMPLE_START_OFFSET_SECS)} of ${fmtDur(duration)} — click to play / seek the source`
+    : `Not sampled · ${fmtDur(duration)} — click to play the source track`;
+
+  return (
+    <span className="flex items-center" title={title}>
+      <span
+        onClick={(e) => {
+          e.stopPropagation();
+          const r = e.currentTarget.getBoundingClientRect();
+          onSeek((e.clientX - r.left) / Math.max(1, r.width));
+        }}
+        className="relative flex-1 h-2 rounded-full bg-surface/60 overflow-hidden cursor-pointer"
+      >
+        {sampled && (
+          <span
+            className="absolute inset-y-0 rounded-full bg-medium"
+            style={{ left: `${left * 100}%`, width: `${width * 100}%` }}
+          />
+        )}
+        {playing && (
+          <span
+            className="absolute inset-y-0 w-px bg-accent"
+            style={{ left: `${Math.max(0, Math.min(1, playFrac)) * 100}%` }}
+          />
+        )}
       </span>
     </span>
   );
@@ -295,6 +361,12 @@ interface LibraryTreeProps {
   playingSig: string | null;
   /** Toggle play/stop for a row's sampled clip. */
   onPlaySample: (row: ScanRow) => void;
+  /** Source-signature of the row whose FULL track is playing (timeline bar). */
+  srcPlayingSig: string | null;
+  /** Playhead position (0..1) of the currently-playing source track. */
+  srcPlayFrac: number;
+  /** Play / seek a row's full source track from a position (0..1). */
+  onSeekSource: (row: ScanRow, frac: number) => void;
   /** Compute the same signature App uses, so rows can match `playingSig`. */
   signatureOf: (row: ScanRow) => string;
   /** Source-signature of the row selected into the left Sample panel. */
@@ -314,6 +386,9 @@ export function LibraryTree({
   isPublished,
   playingSig,
   onPlaySample,
+  srcPlayingSig,
+  srcPlayFrac,
+  onSeekSource,
   signatureOf,
   selectedSig,
   onSelect,
@@ -609,7 +684,13 @@ export function LibraryTree({
                                   </span>
                                 )}
                               </span>
-                              <ClipBar duration={t.durationSecs} sampled={sampled} />
+                              <TrackTimeline
+                                duration={t.durationSecs}
+                                sampled={sampled}
+                                playing={srcPlayingSig === signatureOf(t)}
+                                playFrac={srcPlayFrac}
+                                onSeek={(f) => onSeekSource(t, f)}
+                              />
                             </div>
                           );
                         })}

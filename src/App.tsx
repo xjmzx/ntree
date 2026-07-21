@@ -307,12 +307,23 @@ export default function App() {
   // or a new clip starts — Blob URLs leak memory otherwise.
   const audioUrlRef = useRef<string | null>(null);
   const [playingSig, setPlayingSig] = useState<string | null>(null);
+  // Full-source playback: the row whose SOURCE track is playing + its position
+  // (0..1) for the timeline playhead. Shares the one audio element with the clip
+  // player above — starting either stops the other.
+  const [srcPlay, setSrcPlay] = useState<{ sig: string; frac: number } | null>(
+    null,
+  );
 
   function clearAudio() {
     if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.removeAttribute("src");
-      audioRef.current.load();
+      const a = audioRef.current;
+      a.pause();
+      a.removeAttribute("src");
+      // Drop the source-playback handlers so a later clip play never fires
+      // stale timeline updates (the one element is reused for both).
+      a.ontimeupdate = null;
+      a.onloadedmetadata = null;
+      a.load();
     }
     if (audioUrlRef.current) {
       URL.revokeObjectURL(audioUrlRef.current);
@@ -328,6 +339,7 @@ export default function App() {
       return;
     }
     clearAudio();
+    setSrcPlay(null); // starting a clip stops any full-track playback
     const destPath = sampleDestPath(row.path, libRoot, workspaceDest, SAMPLE_SECS);
     try {
       const bytes = await readAudioBytes(destPath);
@@ -353,6 +365,54 @@ export default function App() {
       await audio.play();
     } catch (e) {
       setPlayingSig((p) => (p === sig ? null : p));
+      setStatus({ text: `playback failed: ${e}`, tone: "alert" });
+      clearAudio();
+    }
+  }
+
+  // Play (or seek) the FULL SOURCE track from position `frac` (0..1) — the
+  // timeline-bar interaction. Seeking the already-playing source is a cheap
+  // currentTime set; a new/other source loads into the shared audio element.
+  async function playSourceAt(row: ScanRow, frac: number) {
+    const sig = sourceSignature(row.path, libRoot);
+    const clamp = Math.max(0, Math.min(1, frac));
+    const cur = audioRef.current;
+    if (srcPlay?.sig === sig && cur && cur.duration > 0) {
+      cur.currentTime = clamp * cur.duration;
+      return;
+    }
+    clearAudio();
+    setPlayingSig(null); // one element — stop any clip playback
+    try {
+      const bytes = await readAudioBytes(row.path); // the SOURCE track
+      const blob = new Blob([bytes.buffer as ArrayBuffer], { type: "audio/flac" });
+      const url = URL.createObjectURL(blob);
+      audioUrlRef.current = url;
+      const a = audioRef.current ?? new Audio();
+      a.src = url;
+      a.onloadedmetadata = () => {
+        if (a.duration > 0) a.currentTime = clamp * a.duration;
+      };
+      a.ontimeupdate = () => {
+        if (a.duration > 0) {
+          const f = a.currentTime / a.duration;
+          setSrcPlay((s) => (s?.sig === sig ? { sig, frac: f } : s));
+        }
+      };
+      a.onended = () => {
+        setSrcPlay((s) => (s?.sig === sig ? null : s));
+        clearAudio();
+      };
+      a.onerror = () => {
+        setSrcPlay((s) => (s?.sig === sig ? null : s));
+        setStatus({ text: `playback failed: ${row.path}`, tone: "alert" });
+        clearAudio();
+      };
+      audioRef.current = a;
+      setSrcPlay({ sig, frac: clamp });
+      await a.play();
+    } catch (e) {
+      setSrcPlay((s) => (s?.sig === sig ? null : s));
       setStatus({ text: `playback failed: ${e}`, tone: "alert" });
       clearAudio();
     }
@@ -1256,6 +1316,9 @@ export default function App() {
               }
               playingSig={playingSig}
               onPlaySample={playSample}
+              srcPlayingSig={srcPlay?.sig ?? null}
+              srcPlayFrac={srcPlay?.frac ?? 0}
+              onSeekSource={playSourceAt}
               signatureOf={(row) => sourceSignature(row.path, libRoot)}
               selectedSig={
                 selectedRow ? sourceSignature(selectedRow.path, libRoot) : null
