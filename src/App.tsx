@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import {
   AlertTriangle,
   ArrowRightLeft,
@@ -11,6 +12,7 @@ import {
   Lock,
   LogOut,
   Radio,
+  Rows3,
   Table,
 } from "lucide-react";
 import { getVersion } from "@tauri-apps/api/app";
@@ -103,6 +105,15 @@ function loadTheme(): Theme {
   return v === "upleb" || v === "fizx" ? v : "mono";
 }
 
+// Library row density — matches nsmpl's super-slim / slim / wide so the two
+// libraries compact + expand consistently. Persisted; defaults to slim.
+const DENSITY_KEY = "afqc-tauri.density";
+type Density = "super-slim" | "slim" | "wide";
+function loadDensity(): Density {
+  const v = localStorage.getItem(DENSITY_KEY);
+  return v === "wide" || v === "super-slim" ? v : "slim";
+}
+
 export default function App() {
   // Report-DB + persisted config + derived selectors, consolidated in one
   // store (lib/library). The load/scan/sample lifecycle stays here in App.
@@ -163,6 +174,7 @@ export default function App() {
   const [identity, setIdentity] = useState<Identity | null>(null);
   const [profile, setProfile] = useState<ProfileMeta | null>(null);
   const [theme, setTheme] = useState<Theme>(loadTheme);
+  const [density, setDensity] = useState<Density>(loadDensity);
   const [appVersion, setAppVersion] = useState<string | null>(null);
   // Sampler dispatch state — shared by the panel batch button and the
   // per-scope Scissors in LibraryTree. One in-flight batch at a time;
@@ -392,6 +404,10 @@ export default function App() {
     root.toggle("theme-mono", theme === "mono");
     localStorage.setItem(THEME_KEY, theme);
   }, [theme]);
+
+  useEffect(() => {
+    localStorage.setItem(DENSITY_KEY, density);
+  }, [density]);
 
   // Resolve app version once.
   useEffect(() => {
@@ -878,6 +894,19 @@ export default function App() {
             version chip, top-left). Balances the 1fr title column so the
             middle module stays centered. */}
         <div className="hidden md:flex items-center justify-end gap-2 mt-1">
+          {/* Library row density — mirrors nsmpl's control so the two libraries
+              compact + expand consistently. */}
+          <Segmented
+            label="rows"
+            icon={<Rows3 size={14} />}
+            value={density}
+            options={[
+              { value: "super-slim", label: "super" },
+              { value: "slim", label: "slim" },
+              { value: "wide", label: "wide" },
+            ]}
+            onChange={setDensity}
+          />
           {/* view-switch group — Home first, then the alt views; the active
               view is always lit, and Home is the single way back (matches
               ndisc). Borrows ndisc's digital-tone toolbar button. */}
@@ -1214,6 +1243,7 @@ export default function App() {
               />
             <LibraryTree
               rows={filteredRows}
+              density={density}
               libRoot={libRoot}
               anyFilter={anyFilter}
               onOpenStatus={setStatus}
@@ -1318,5 +1348,52 @@ export default function App() {
       </footer>
 
     </div>
+  );
+}
+
+// A compact segmented toggle (icon/label + a row of options). Mirrors nsmpl's
+// control so the two apps' selectors read as one; the active option inverts.
+function Segmented<T extends string | number>({
+  label,
+  icon,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  icon?: ReactNode;
+  value: T;
+  options: { value: T; label: string }[];
+  onChange: (v: T) => void;
+}) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span
+        className="text-muted/70 inline-flex items-center"
+        title={label}
+        aria-label={label}
+      >
+        {icon}
+      </span>
+      <span className="inline-flex rounded-md overflow-hidden bg-surface">
+        {options.map((opt, i) => (
+          <button
+            key={String(opt.value)}
+            type="button"
+            onClick={() => onChange(opt.value)}
+            title={`${label}: ${opt.label}`}
+            className={
+              "px-2.5 py-2 text-xs font-mono transition-colors " +
+              (i > 0 ? "border-l border-bg/40 " : "") +
+              (value === opt.value
+                ? "bg-accent text-bg"
+                : "text-muted hover:text-fg hover:bg-surfaceHover")
+            }
+          >
+            {opt.label}
+          </button>
+        ))}
+      </span>
+    </span>
   );
 }

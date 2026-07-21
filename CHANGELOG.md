@@ -49,6 +49,55 @@ variable-length sampling lands, per-track clip length should be read from the
 actual `.<secs>s.flac` clip rather than the constant — `nsmpl` already probes
 per-clip length this way.
 
+### Web-optimized Opus compress step
+- A separate step alongside Sample (own destination, own cancel flag):
+  re-encode the FLAC clips under the workspace dest to **Opus** under a new
+  *compress* dest, mirroring the tree. `ffmpeg -vn -ac 2 -c:a libopus -b:a 96k`
+  — the **`-ac 2` stereo downmix** is deliberate: web discovery clips want
+  stereo, and it sidesteps libopus rejecting multichannel sources (a 5.1 FLAC
+  clip failed with *"Invalid channel layout 5.1(side)"* until the downmix).
+  Idempotent (existing `.opus` skipped), with the same rayon batch / progress /
+  cancel machinery as sampling, a coverage scan, and an inline error panel.
+- New third column in the top strip: **Source · Destination · Compress**.
+  Shrinks a real clip set roughly **28 GB → ~150 MB** (18,795 clips), the
+  artifact a web reader should serve instead of the archival FLAC.
+
+*Forward note:* the clip.v1 NIP-96 uploader should publish the **Opus** file
+rather than the FLAC — that rides the clip.v1 producer wave, not this change.
+
+### Monochrome dot model — library indicators
+- 0.3.0 greyed the *chrome*; this greys the **library indicators** to match,
+  via a new **`--c-medium`** token — green in the colour themes, off-white grey
+  in mono, mirroring ndisc's reference. Leaf-dots, the track/release count
+  glyphs, the clip-coverage / sample-segment bars, the scope status dot, and the
+  sample-detail markers all move onto it, so mono reads monochrome.
+- The **HI-RES / LOSSLESS quality verdicts stay green** — a verdict is
+  information, never decoration, so it keeps its colour in every theme (the same
+  reason ndisc never greys `--c-ok`).
+
+### Theme-button tooltip is now 3-state
+- The title cycles fizx → upleb → mono (0.3.0), but its tooltip was still
+  2-state — it mislabelled the `upleb` and `mono` states, and `mono` is the
+  default, so a fresh install greeted you with the wrong label. It now names all
+  three states correctly.
+
+### Shared suite dir resolved per platform
+- `published.json` / `catalogue.json` / `bpm.json` and the `roots.json` config
+  now resolve through `suite_shared_dir()` / `suite_config_dir()` per platform
+  (Linux + macOS `$HOME/.local/share/ndisc-suite`; Windows
+  `%LOCALAPPDATA%\ndisc-suite`) instead of a hardcoded Linux path. Part of the
+  suite-wide wave so a Windows build can read ndisc's exported manifest at all —
+  the old path fails outright on Windows, where `HOME` is normally unset.
+
+### Density toggle + library consistency with nsmpl
+- New **super / slim / wide** density control in the header (the same `Segmented`
+  pattern nsmpl uses), scaling the Library tree's artist/album/track row padding —
+  compact for large scans, roomy for browsing. Persisted; defaults to `slim` (the
+  prior sizing).
+- Softened the **artist-row weight** (`font-semibold` → `font-medium`) to match
+  ndisc's lighter row treatment — part of aligning ntree's Library with nsmpl's
+  and ndisc's (the shared `--c-medium` dot model, count glyphs, and now density).
+
 ## 0.3.0 — 2026-07-14
 
 ### Monochrome theme — and it is now the default

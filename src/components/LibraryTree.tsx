@@ -251,8 +251,20 @@ function scopeStatus(
   return { sampled, published, dot };
 }
 
+type Density = "super-slim" | "slim" | "wide";
+
+// Vertical rhythm per density tier — scales the tree's row padding so the
+// Library compacts (super-slim) or breathes (wide). `slim` = the prior fixed
+// sizing. Mirrors nsmpl's density lockstep.
+const DENSITY: Record<Density, { artist: string; album: string; track: string }> = {
+  "super-slim": { artist: "py-0.5", album: "py-0.5", track: "py-0" },
+  slim: { artist: "py-1.5", album: "py-1", track: "py-0.5" },
+  wide: { artist: "py-2.5", album: "py-2", track: "py-1.5" },
+};
+
 interface LibraryTreeProps {
   rows: ScanRow[];
+  density: Density;
   libRoot: string;
   anyFilter: boolean;
   onOpenStatus: (s: { text: string; tone: "muted" | "warn" | "ok" | "alert" }) => void;
@@ -293,6 +305,7 @@ interface LibraryTreeProps {
 
 export function LibraryTree({
   rows,
+  density,
   libRoot,
   anyFilter,
   onOpenStatus,
@@ -305,6 +318,7 @@ export function LibraryTree({
   selectedSig,
   onSelect,
 }: LibraryTreeProps) {
+  const D = DENSITY[density];
   const artists = useMemo(() => group(rows, libRoot), [rows, libRoot]);
   const [openArtists, setOpenArtists] = useState<Set<string>>(new Set());
   const [openAlbums, setOpenAlbums] = useState<Set<string>>(new Set());
@@ -416,11 +430,11 @@ export function LibraryTree({
                 : `Sample ${artist.totalTracks} tracks across ${artist.albums.length} releases — 10s each`;
           return (
             <div key={artist.name}>
-              <div className="w-full flex items-center pr-2 py-1.5 hover:bg-surface/30">
+              <div className={cn("w-full flex items-center pr-2 hover:bg-surface/30", D.artist)}>
                 <button
                   onClick={() => toggleArtist(artist.name)}
                   className="flex-1 min-w-0 flex items-center gap-2 px-3 text-left
-                             text-accent font-semibold text-sm"
+                             text-accent font-medium text-sm"
                 >
                   {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                   <span className="flex-1 truncate">{artist.name}</span>
@@ -476,7 +490,7 @@ export function LibraryTree({
                         : `Sample ${album.tracks.length} tracks from this release — 10s each`;
                   return (
                     <div key={key}>
-                      <div className="w-full flex items-center pr-2 py-1 hover:bg-surface/20">
+                      <div className={cn("w-full flex items-center pr-2 hover:bg-surface/20", D.album)}>
                         <button
                           onClick={() => toggleAlbum(key)}
                           className="flex-1 min-w-0 flex items-center gap-2 pl-8 pr-2
@@ -537,7 +551,8 @@ export function LibraryTree({
                               title={t.path}
                               className={cn(
                                 "grid grid-cols-[16px_1fr_120px_90px_112px_96px] gap-2 items-center",
-                                "pl-12 pr-3 py-0.5 text-xs font-mono cursor-pointer",
+                                "pl-12 pr-3 text-xs font-mono cursor-pointer",
+                                D.track,
                                 "hover:bg-surface/40",
                                 i % 2 === 1 && "bg-bg/40",
                                 selected && "bg-accent/15 hover:bg-accent/20",
@@ -610,7 +625,8 @@ export function LibraryTree({
                             title={`${v.path} · video (not analysed)`}
                             className={cn(
                               "grid grid-cols-[16px_1fr_120px_90px_112px_96px] gap-2 items-center",
-                              "pl-12 pr-3 py-0.5 text-xs font-mono",
+                              "pl-12 pr-3 text-xs font-mono",
+                              D.track,
                               "hover:bg-surface/40 text-fg/70",
                             )}
                           >
