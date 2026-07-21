@@ -62,7 +62,7 @@ export function SampleDetails({
   return (
     <Section
       title="Sample"
-      icon={<span className="inline-block w-2 h-2 rounded-full bg-ok/70" />}
+      icon={<span className="inline-block w-2 h-2 rounded-full bg-medium/70" />}
       onTitleClick={onCollapse}
       // No tinted stroke: Library and Radio use Section's default border, and a
       // coloured one here only made this panel read as a different kind of box.
@@ -113,13 +113,13 @@ export function SampleDetails({
         <div className="text-muted text-[10px] uppercase tracking-wide">source</div>
         <ProvRow
           marker="▲"
-          markerClass="text-ok"
+          markerClass="text-medium"
           label="from"
           parts={fromParts}
         />
         <ProvRow
           marker="▼"
-          markerClass={hasClip ? "text-ok" : "text-muted"}
+          markerClass={hasClip ? "text-medium" : "text-muted"}
           label="to"
           parts={toParts}
         />
@@ -130,7 +130,7 @@ export function SampleDetails({
         <span
           className={cn(
             "inline-block w-2 h-2 rounded-full shrink-0",
-            hasClip ? "bg-ok/70" : "bg-muted/40",
+            hasClip ? "bg-medium/70" : "bg-muted/40",
           )}
         />
         {hasClip ? (
@@ -140,7 +140,7 @@ export function SampleDetails({
             className={cn(
               "inline-flex items-center gap-1.5 px-2 py-1 rounded-md",
               "bg-surface hover:bg-surfaceHover transition-colors",
-              isPlaying ? "text-mauve" : "text-ok",
+              isPlaying ? "text-mauve" : "text-medium",
             )}
             title={isPlaying ? "Stop preview" : `Preview ${SAMPLE_SECS}s clip`}
           >

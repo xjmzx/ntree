@@ -73,8 +73,10 @@ function barWidth(frac: number): string {
 
 /** Per-track clip-coverage bar: the fixed 10s clip as a fraction of the full
  *  source-track duration (fraction fill — all bars equal width — so "how much
- *  of the track is sampled" reads at a glance). Green fill matches ntree's
- *  clip=green language. Empty when the clip is absent (fill 0) or the duration
+ *  of the track is sampled" reads at a glance). The fill is `--c-medium` (grey
+ *  in mono, green in the colour themes), matching the leaf dots — clip presence
+ *  is decoration, not a verdict. Empty when the clip is absent (fill 0) or the
+ *  duration
  *  is unknown (pre-duration report — rescan to populate). */
 function ClipBar({ duration, sampled }: { duration: number | null; sampled: boolean }) {
   if (!duration || duration <= 0) {
@@ -94,7 +96,7 @@ function ClipBar({ duration, sampled }: { duration: number | null; sampled: bool
     <span className="flex items-center" title={title}>
       <span className="relative flex-1 h-1.5 rounded-full bg-surface/60 overflow-hidden">
         <span
-          className="absolute inset-y-0 left-0 rounded-full bg-ok"
+          className="absolute inset-y-0 left-0 rounded-full bg-medium"
           style={{ width: sampled ? barWidth(frac) : 0 }}
         />
       </span>
@@ -136,7 +138,7 @@ function CoverageBar({
     >
       <span className="relative flex-1 h-1 rounded-full bg-surface/60 overflow-hidden">
         <span
-          className="absolute inset-y-0 left-0 rounded-full bg-ok/80"
+          className="absolute inset-y-0 left-0 rounded-full bg-medium/80"
           style={{ width: barWidth(cov.frac) }}
         />
       </span>
@@ -225,8 +227,8 @@ function countsFor(tracks: TrackRow[]): Record<Verdict, number> {
 }
 
 // Sample-state of a scope as a simple status dot, reusing the suite's three
-// colour values: not sampled (muted) · sampled (ok green) · sampled + published
-// (mauve). Replaces the old colour-coded leaf on the scope sample buttons.
+// colour values: not sampled (muted) · sampled (--c-medium — grey in mono, green
+// in colour) · sampled + published (mauve). Replaces the old colour-coded leaf.
 //
 // "Published" HERE means a CLIP this app pushed as a NIP-94 kind:1063 file
 // event, tracked in localStorage with no relay verification. It is NOT the
@@ -245,7 +247,7 @@ function scopeStatus(
   const sampled = tracks.filter(hasSample).length;
   const published = tracks.filter(isPublished).length;
   const dot =
-    published > 0 ? "bg-nostr" : sampled > 0 ? "bg-ok" : "bg-muted/40";
+    published > 0 ? "bg-nostr" : sampled > 0 ? "bg-medium" : "bg-muted/40";
   return { sampled, published, dot };
 }
 
@@ -561,7 +563,7 @@ export function LibraryTree({
                                   className={cn(
                                     "flex items-center justify-center rounded",
                                     "hover:text-accent",
-                                    isPlaying ? "text-mauve" : "text-ok",
+                                    isPlaying ? "text-mauve" : "text-medium",
                                   )}
                                 >
                                   {isPlaying ? (

@@ -35,7 +35,8 @@ export function LeafIcon({
 
 /**
  * Leaf-dots — the suite's diagrammatic quantity glyph (shared with ndisc /
- * ndisc.smpl). A leaf is a track; each track is one flat, muted leaf-green dot,
+ * ndisc.smpl). A leaf is a track; each track is one flat, muted neutral dot
+ * (`--c-medium` — green in the colour themes, grey in mono, mirroring ndisc),
  * and the dots stack into a compact cluster (wrap at 5 per row) so the count
  * itself is the picture — leaves piling on a branch. Renders nothing for 0.
  * Capped at `max` (default 99); the exact figure stays in the hover title.
@@ -58,7 +59,7 @@ export function LeafDots({
   maxRows,
   className,
 }: {
-  /** Present count (solid green dots). */
+  /** Present count (solid `--c-medium` dots). */
   n: number | null | undefined;
   /** Expected total — extra (missing) slots render at 25%. */
   total?: number | null;
@@ -67,7 +68,7 @@ export function LeafDots({
   /** Max dots per row — lower = taller/narrower, higher = shorter/wider. */
   maxCols?: number;
   /** When set, the grid is capped at this many rows; a larger count collapses
-   *  to a solid leaf-green tile with the total centred (matches ndisc). */
+   *  to a solid `--c-medium` tile with the total centred (matches ndisc). */
   maxRows?: number;
   className?: string;
 }) {
@@ -84,7 +85,7 @@ export function LeafDots({
         }`
       : `${present}${present >= max ? "+" : ""} ${unit}${present === 1 ? "" : "s"}`;
 
-  // Past the row cap, collapse the grid to one solid leaf-green tile carrying
+  // Past the row cap, collapse the grid to one solid `--c-medium` tile carrying
   // the total, centred (same as ndisc's large-count treatment).
   if (maxRows != null && Math.ceil(shown / cols) > maxRows) {
     return (
@@ -94,7 +95,7 @@ export function LeafDots({
         title={title}
         className={className}
         shapeClassName="rounded-[3px]"
-        colorClassName="bg-ok/70 text-bg"
+        colorClassName="bg-medium/70 text-bg"
       />
     );
   }
@@ -117,7 +118,7 @@ export function LeafDots({
           key={i}
           className={cn(
             "w-1 h-1 rounded-full",
-            i < present ? "bg-ok/70" : "bg-ok/25",
+            i < present ? "bg-medium/70" : "bg-medium/25",
           )}
         />
       ))}
@@ -128,9 +129,9 @@ export function LeafDots({
 /**
  * A count rendered as a number centred on a single solid fixed-size shape —
  * the suite's "one mark for a quantity" glyph (shared with ndisc). Flavour via
- * className props: tracks collapse onto a leaf-green rounded tile; the release
- * count is a leaf-green circle. Shape encodes role (square tile = tracks, circle
- * = child-count), green throughout.
+ * className props: tracks collapse onto a neutral (`--c-medium`) rounded tile;
+ * the release count is a `--c-medium` circle. Shape encodes role (square tile =
+ * tracks, circle = child-count); the mark is grey in mono, green in colour.
  */
 export function CountBadge({
   value,
@@ -169,11 +170,11 @@ export function CountBadge({
 
 /**
  * Release count — the artist-level counterpart to LeafDots, now in the shared
- * suite language: a leaf-green numbered circle (the same CountBadge glyph
- * ndisc uses for its per-release disc count). The circle = "count of this
+ * suite language: a neutral (`--c-medium`) numbered circle (the same CountBadge
+ * glyph ndisc uses for its per-release disc count). The circle = "count of this
  * node's children" (releases here, discs in ndisc); the square tile / dots =
- * tracks. Shape encodes the role, green throughout — so tree and ndisc read as
- * one visual language. (Decorative dot glyphs live on in DotCluster.)
+ * tracks. Shape encodes the role; the mark is grey in mono / green in colour —
+ * so tree and ndisc read as one visual language (both on `--c-medium`).
  */
 export function ReleaseTree({
   n,
@@ -194,7 +195,7 @@ export function ReleaseTree({
       atMax={raw >= max}
       title={title}
       shapeClassName="rounded-full"
-      colorClassName="bg-ok/70 text-bg"
+      colorClassName="bg-medium/70 text-bg"
       className={className}
     />
   );
@@ -203,8 +204,9 @@ export function ReleaseTree({
 /**
  * A small scatter of dots in varied hues and sizes — the suite's dot
  * vocabulary used as a decorative glyph (not a count). It marks "Radio": a
- * handful of samples out on the wire. The mixed hues (present green / published
- * mauve / unknown muted) and sizes read as a spread of leaves rather than a
+ * handful of samples out on the wire. The mixed hues (present `--c-medium` /
+ * published mauve / unknown muted) and sizes read as a spread of leaves rather
+ * than a
  * single mark — the dot-cluster successor to the old dot-tree/forest motifs.
  */
 export function DotCluster({ className }: { className?: string }) {
@@ -213,10 +215,10 @@ export function DotCluster({ className }: { className?: string }) {
       className={cn("inline-flex items-center gap-[2px]", className)}
       aria-hidden="true"
     >
-      <span className="w-1 h-1 rounded-full bg-ok/70" />
+      <span className="w-1 h-1 rounded-full bg-medium/70" />
       <span className="w-1.5 h-1.5 rounded-full bg-mauve/70" />
       <span className="w-[3px] h-[3px] rounded-full bg-muted/60" />
-      <span className="w-1 h-1 rounded-full bg-ok/45" />
+      <span className="w-1 h-1 rounded-full bg-medium/45" />
     </span>
   );
 }

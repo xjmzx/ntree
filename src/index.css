@@ -16,6 +16,11 @@
   --c-accent: 122 240 205;
   --c-digital: 125 211 252;
   --c-ok: 74 222 128;
+  /* Neutral leaf / coverage mark — green here, GREY in the mono theme (below),
+     mirroring ndisc's --c-medium. The decorative track/release presence dots and
+     sample-coverage bars use this, so mono reads monochrome; --c-ok stays green
+     for the lossless VERDICT (information, not decoration). */
+  --c-medium: 74 222 128;
   --c-warn: 255 220 50;   /* HSL 50°/100%/60% — vivid amber-yellow, theme-consistent */
   --c-alert: 255 80 80;   /* HSL 0°/100%/66% — vivid pure red, theme-consistent */
   --c-mauve: 167 139 250;
@@ -42,6 +47,8 @@
   --c-accent: 255 182 158;
   --c-digital: 255 120 73;
   --c-ok: 74 222 128;
+  /* same leaf green as :root — the colour themes keep it green; only mono greys it */
+  --c-medium: 74 222 128;
   --c-warn: 255 220 50;   /* must match :root — verdict colours read the same in both themes */
   --c-alert: 255 80 80;
   --c-mauve: 255 179 71;
@@ -130,6 +137,11 @@ select option:checked {
   --c-muted: 122 122 128;
 
   --c-accent: 232 232 236;
+  /* Neutral mark greyed for mono — off-white, a notch below --c-fg (matches
+     ndisc's --c-medium = 210 210 216). The green leaf dots + coverage bars
+     resolve here so the Library reads monochrome; --c-ok (lossless) is NOT
+     greyed — a verdict is information, and must keep its colour. */
+  --c-medium: 210 210 216;
   --c-mauve: 198 198 204;
   --c-digital: 152 152 159;
   --c-auburn: 150 150 156;
