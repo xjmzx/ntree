@@ -161,7 +161,7 @@ export function TableView({ report }: { report: ScanReport | null }) {
   }
 
   return (
-    <div className="rounded-xl bg-panel border border-surface/60 shadow-md flex flex-col min-h-0 h-full overflow-hidden">
+    <div className="rounded-xl bg-panel shadow-md flex flex-col min-h-0 h-full overflow-hidden">
       <div className="flex items-center gap-3 px-4 py-1.5 shrink-0 border-b border-surface/60 text-xs">
         <span className="text-muted shrink-0">
           {!report

@@ -178,7 +178,7 @@ export function VideoCensus({ root }: { root: string }) {
   const basename = (p: string) => p.split("/").pop() ?? p;
 
   return (
-    <div className="rounded-xl bg-panel border border-surface/60 shadow-md flex flex-col min-h-0 h-full overflow-hidden">
+    <div className="rounded-xl bg-panel shadow-md flex flex-col min-h-0 h-full overflow-hidden">
       {/* Toolbar: title · per-bucket summary · refresh */}
       <div className="flex items-center gap-3 px-4 py-2 shrink-0 border-b border-surface/60 text-xs">
         <span className="text-accent font-medium uppercase tracking-wide shrink-0">

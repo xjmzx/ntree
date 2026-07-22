@@ -862,7 +862,7 @@ export default function App() {
 
   return (
     <div className="h-screen p-6 max-w-[1500px] mx-auto flex flex-col gap-4">
-      <header className="shrink-0 rounded-lg bg-panel border border-surface/60
+      <header className="shrink-0 rounded-lg bg-panel shadow-md
                          px-4 py-3 flex md:grid md:grid-cols-[1fr_auto_1fr]
                          items-start gap-4">
         <div className="flex items-center gap-3 shrink-0">
@@ -1040,12 +1040,15 @@ export default function App() {
         {/* Slim top strip — Source (scan config) and Destination (sample
             config + mirror-tree controls) side by side; the dest editor lives
             only here. Full-width above the [ Sample ][ Library ][ Radio ] row. */}
-        <Section
-          title="Source & destination"
-          icon={<ArrowRightLeft size={16} />}
-        >
+        {/* Plain card (no Section header) — the ⇄ icon rides inline with the
+            Source label instead of its own header row, reclaiming the height. */}
+        <div className="rounded-xl bg-panel shadow-md p-4">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div>
+              <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-[0.15em] text-muted font-semibold mb-2">
+                <ArrowRightLeft size={13} className="text-accent" />
+                Source
+              </div>
               <ScannerControls
                 bare
                 root={root}
@@ -1060,6 +1063,9 @@ export default function App() {
               />
             </div>
             <div className="lg:border-l lg:border-surface/50 lg:pl-4">
+              <div className="text-[10px] uppercase tracking-[0.15em] text-muted font-semibold mb-2">
+                Destination
+              </div>
               <SamplerPanel
                 bare
                 rows={filteredRows}
@@ -1078,6 +1084,9 @@ export default function App() {
               />
             </div>
             <div className="lg:border-l lg:border-surface/50 lg:pl-4">
+              <div className="text-[10px] uppercase tracking-[0.15em] text-muted font-semibold mb-2">
+                Compress
+              </div>
               <CompressPanel
                 bare
                 total={sampledSignatures.size}
@@ -1090,7 +1099,7 @@ export default function App() {
               />
             </div>
           </div>
-        </Section>
+        </div>
 
         {/* Orphan clips — full-width strip directly under Source & destination,
             present only when there's something to clean. */}
@@ -1372,7 +1381,7 @@ export default function App() {
       </div>
       )}
 
-      <footer className="shrink-0 rounded-lg bg-panel border border-surface/60
+      <footer className="shrink-0 rounded-lg bg-panel shadow-md
                          px-4 py-2 flex flex-wrap items-center justify-between
                          gap-x-8 gap-y-1 text-xs text-muted">
         <span>stack: Tauri 2 + React + TS + Tailwind</span>

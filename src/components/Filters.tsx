@@ -82,7 +82,7 @@ export function Filters({ filter, setFilter, manifestCount }: FiltersProps) {
         <select
           value={filter.verdict}
           onChange={(e) => setFilter({ ...filter, verdict: e.target.value as FilterState["verdict"] })}
-          className="appearance-none pl-3 pr-8 py-2 rounded-md bg-bg text-fg outline-none
+          className="appearance-none pl-3 pr-8 py-1 rounded-md bg-bg text-fg outline-none
                      border border-transparent focus:border-accent/50 text-sm cursor-pointer"
         >
           <option value="All">All</option>
@@ -129,7 +129,7 @@ export function Filters({ filter, setFilter, manifestCount }: FiltersProps) {
             aria-pressed={filter.sample !== "all"}
             aria-label="Clip filter"
             title={s.title}
-            className="flex items-center justify-center h-9 w-9 rounded-md
+            className="flex items-center justify-center h-7 w-7 rounded-md
                        bg-surface hover:bg-surfaceHover transition-colors"
           >
             <span
@@ -162,7 +162,7 @@ export function Filters({ filter, setFilter, manifestCount }: FiltersProps) {
               ? `Showing only tracks inside the ${manifestCount.toLocaleString()} RELEASES ndisc has published to Nostr (kind:31237). Click to clear.\n\nNot to be confused with the Library's mauve dot, which marks a CLIP this app published (kind:1063).`
               : `Show only tracks inside the ${manifestCount.toLocaleString()} releases ndisc has published to Nostr (kind:31237) — the scope for sampling the published discography.\n\nNot to be confused with the Library's mauve dot, which marks a clip this app published (kind:1063).`
           }
-          className={`flex items-center gap-1.5 h-9 px-2.5 rounded-md text-xs
+          className={`flex items-center gap-1.5 h-7 px-2.5 rounded-md text-xs
                       transition-colors ${
                         filter.released === "released"
                           ? "bg-nostr/20 text-nostr"
@@ -185,7 +185,7 @@ export function Filters({ filter, setFilter, manifestCount }: FiltersProps) {
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
           placeholder="search path…  (Ctrl+F · Esc clears)"
-          className="w-full pl-8 pr-3 py-2 rounded-md bg-surface text-fg
+          className="w-full pl-8 pr-3 py-1 rounded-md bg-surface text-fg
                      placeholder:text-muted outline-none border border-transparent
                      focus:border-accent/50 text-sm"
           spellCheck={false}

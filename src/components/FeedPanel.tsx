@@ -95,10 +95,10 @@ function NpubChip({ npub }: { npub: string }) {
       onClick={copy}
       title={copied ? "Copied!" : `${shortNpub(npub)} — click to copy`}
       className={cn(
-        "inline-flex items-center gap-0.5 font-mono shrink-0",
+        "inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded font-mono shrink-0 transition-colors",
         copied
-          ? "text-ok"
-          : "text-accent hover:text-fg",
+          ? "bg-ok/15 text-ok"
+          : "bg-nostr/15 text-nostr hover:bg-nostr hover:text-bg",
       )}
     >
       {copied ? <Check size={10} /> : null}
@@ -342,7 +342,7 @@ export function FeedPanel({ identity, relays, onCollapse }: FeedPanelProps) {
         <p className="text-xs text-alert font-mono break-all">{errMsg}</p>
       )}
 
-      <ul className="flex-1 min-h-0 overflow-auto rounded-md bg-bg/40 divide-y divide-surface/30">
+      <ul className="flex-1 min-h-0 overflow-auto rounded-md bg-bg/40 p-1.5 flex flex-col gap-1.5">
         {visible.length === 0 && (
           <li className="px-3 py-6 text-xs text-muted text-center">
             {status === "ready"
@@ -376,7 +376,11 @@ export function FeedPanel({ identity, relays, onCollapse }: FeedPanelProps) {
             await reactions.react(event.id, REACTION_DOWN);
           };
           return (
-            <li key={event.id} className="px-2 py-1.5 space-y-1">
+            <li
+              key={event.id}
+              className="rounded-lg bg-surface/30 border border-surface/40
+                         hover:border-surface/80 transition-colors px-2 py-1.5 space-y-1"
+            >
               {/* Two-row compact layout: meta + reactions on row 1,
                   audio element on row 2. Full title moves to tooltip. */}
               <div className="flex items-center gap-2 text-[11px]">

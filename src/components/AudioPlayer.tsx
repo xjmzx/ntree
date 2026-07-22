@@ -84,30 +84,48 @@ export function AudioPlayer({ src, className }: AudioPlayerProps) {
   const pct = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
-    <div
-      className={cn(
-        "flex items-center gap-2 px-2 py-1 rounded bg-bg/40",
-        className,
-      )}
-    >
+    <div className={cn("flex items-center gap-2", className)}>
       <audio ref={audioRef} src={src} preload="none" />
+      {/* Solid rounded-square transport — filled accent, inverts to a filled
+          state while playing (the mockup's sq + tri). */}
       <button
         onClick={toggle}
-        className="text-fg/90 hover:text-accent shrink-0 transition-colors"
+        className={cn(
+          "grid place-items-center h-6 w-6 rounded-md shrink-0 transition-colors",
+          playing
+            ? "bg-accent text-bg"
+            : "bg-accent/15 text-accent hover:bg-accent hover:text-bg",
+        )}
         title={playing ? "Pause" : "Play"}
         aria-label={playing ? "Pause" : "Play"}
       >
-        {playing ? <Pause size={14} /> : <Play size={14} />}
+        {playing ? (
+          <Pause size={12} className="fill-current" />
+        ) : (
+          <Play size={12} className="fill-current" />
+        )}
       </button>
       <div
         onClick={seek}
-        className="flex-1 h-1 rounded-full bg-surface/60 overflow-hidden cursor-pointer relative min-w-0"
+        className="flex-1 h-4 flex items-center cursor-pointer relative min-w-0"
         title="Click to seek"
       >
-        <div
-          className="h-full bg-accent transition-[width] duration-75"
-          style={{ width: `${pct}%` }}
-        />
+        <div className="h-1.5 w-full rounded-full bg-surface/60 relative overflow-hidden">
+          <div
+            className="absolute inset-y-0 left-0 rounded-full bg-accent transition-[width] duration-75"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+        {/* Scrubber knob at the play head — hidden at rest so the bar reads
+            clean, appears once there's a position to mark. */}
+        {pct > 0 && (
+          <div
+            className="absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2
+                       rounded-full bg-accent ring-2 ring-bg/70 pointer-events-none
+                       transition-[left] duration-75"
+            style={{ left: `${pct}%` }}
+          />
+        )}
       </div>
       <span className="text-[10px] text-muted font-mono tabular-nums shrink-0">
         {formatTime(currentTime)} / {formatTime(duration)}

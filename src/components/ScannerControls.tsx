@@ -194,7 +194,7 @@ export function ScannerControls({ root, setRoot, onReport, onStatus, onScanState
     >
       {/* Pinned line — survives the collapse toggle so a glance at the
           card always answers "what was the last scan?" */}
-      {report && (
+      {!bare && report && (
         <div className="text-xs text-muted font-mono">
           scan: {report.generated.slice(0, 10)} ·{" "}
           {report.rows.length.toLocaleString()} files
@@ -211,7 +211,7 @@ export function ScannerControls({ root, setRoot, onReport, onStatus, onScanState
           placeholder="/path/to/music"
           disabled={busy}
           title={root}
-          className="flex-1 min-w-0 px-3 py-2 rounded-md bg-surface text-fg
+          className="flex-1 min-w-0 px-2.5 py-1 rounded-md bg-surface text-fg
                      placeholder:text-muted outline-none border border-transparent
                      focus:border-accent/50 disabled:opacity-50"
           spellCheck={false}
@@ -219,7 +219,7 @@ export function ScannerControls({ root, setRoot, onReport, onStatus, onScanState
         <button
           onClick={browse}
           disabled={busy}
-          className="px-3 py-2 rounded-md bg-surface hover:bg-surfaceHover
+          className="px-2.5 py-1 rounded-md bg-surface hover:bg-surfaceHover
                      text-fg disabled:opacity-50 disabled:cursor-not-allowed
                      flex items-center justify-center"
           title="Browse for folder"
@@ -232,7 +232,7 @@ export function ScannerControls({ root, setRoot, onReport, onStatus, onScanState
             onClick={stopScan}
             disabled={cancelling}
             className={cn(
-              "px-3 py-2 rounded-md font-semibold",
+              "px-2.5 py-1 rounded-md font-semibold",
               "flex items-center justify-center",
               "disabled:opacity-50 disabled:cursor-not-allowed",
               "bg-alert/15 text-alert hover:bg-alert hover:text-bg transition-colors",
@@ -247,7 +247,7 @@ export function ScannerControls({ root, setRoot, onReport, onStatus, onScanState
             onClick={requestScan}
             disabled={busy || !root.trim()}
             className={cn(
-              "px-3 py-2 rounded-md font-semibold",
+              "px-2.5 py-1 rounded-md font-semibold",
               "flex items-center justify-center",
               "disabled:opacity-50 disabled:cursor-not-allowed",
               "bg-accent text-bg hover:opacity-90",
@@ -261,7 +261,7 @@ export function ScannerControls({ root, setRoot, onReport, onStatus, onScanState
       </div>
 
       {state.kind === "confirming" && (
-        <div className="rounded-md bg-bg/50 px-3 py-2.5 space-y-2 text-xs">
+        <div className="rounded-md bg-bg/50 px-2.5 py-1.5 space-y-2 text-xs">
           <div className="text-fg">
             <span className="font-semibold">{state.count.fileCount.toLocaleString()}</span> FLAC ·{" "}
             <span className="font-semibold">{formatBytes(state.count.totalBytes)}</span> ·

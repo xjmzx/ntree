@@ -9,7 +9,7 @@ import {
   Pause,
   Play,
 } from "lucide-react";
-import { LeafDots, ReleaseTree } from "./LeafIcon";
+import { LeafDots } from "./LeafIcon";
 import { cn } from "../lib/cn";
 import { splitPath } from "../lib/paths";
 import { openFolder, type HiRes, type ScanRow, type Verdict } from "../lib/tauri";
@@ -203,7 +203,10 @@ function CoverageBar({
       className="flex items-center shrink-0 w-12"
       title={`Clip coverage · ${fmtDurLong(cov.sampledSecs)} sampled of ${fmtDurLong(cov.totalSecs)}`}
     >
-      <span className="relative flex-1 h-1 rounded-full bg-opus/15 overflow-hidden">
+      {/* Header-row aggregate bar: a quiet neutral track that JOINS the row bg
+          (not a blue chip). The opus-blue remainder stays on the per-track
+          bars (ClipBar / TrackTimeline), where it means "Opus web copy". */}
+      <span className="relative flex-1 h-1 rounded-full bg-fg/5 overflow-hidden">
         <span
           className="absolute inset-y-0 left-0 rounded-full bg-medium/80"
           style={{ width: barWidth(cov.frac) }}
@@ -324,8 +327,10 @@ type Density = "super-slim" | "slim" | "wide";
 // Library compacts (super-slim) or breathes (wide). `slim` = the prior fixed
 // sizing. Mirrors nsmpl's density lockstep.
 const DENSITY: Record<Density, { artist: string; album: string; track: string }> = {
-  "super-slim": { artist: "py-0.5", album: "py-0.5", track: "py-0" },
-  slim: { artist: "py-1.5", album: "py-1", track: "py-0.5" },
+  // slim (the default) matches nplay/ndisc's flat py-0.5 header rows; the
+  // headers were the loose ones (py-1.5/py-1) — tracks were already tight.
+  "super-slim": { artist: "py-0", album: "py-0", track: "py-0" },
+  slim: { artist: "py-0.5", album: "py-0.5", track: "py-0.5" },
   wide: { artist: "py-2.5", album: "py-2", track: "py-1.5" },
 };
 
@@ -501,7 +506,6 @@ export function LibraryTree({
           const {
             sampled: sampledHere,
             published: publishedHere,
-            dot: artistDot,
           } = scopeStatus(allArtistTracks, hasSample, isPublished);
           const artistCoverage = coverageOf(allArtistTracks, hasSample);
           const artistDotTitle =
@@ -512,44 +516,88 @@ export function LibraryTree({
                 : `Sample ${artist.totalTracks} tracks across ${artist.albums.length} releases — 10s each`;
           return (
             <div key={artist.name}>
-              <div className={cn("w-full flex items-center pr-2 hover:bg-surface/30", D.artist)}>
+              {/* Top-level row on the ndisc/nplay Collection block model: a
+                  hover-brightening name pill + boxed trailing blocks (coverage
+                  bar · clipped dot · sample/published dot · release count). The
+                  count badge is flush-right with rounded-tr so it gives the row
+                  its top-right corner. Ref: nplay LibraryTree. */}
+              <div className={cn("group/row w-full flex items-center pl-2 pr-2 hover:bg-fg/5 transition-colors", D.artist)}>
                 <button
                   onClick={() => toggleArtist(artist.name)}
-                  className="flex-1 min-w-0 flex items-center gap-2 px-3 text-left
-                             text-accent font-medium text-sm"
+                  className="flex-1 min-w-0 flex items-center gap-1.5 text-left"
                 >
-                  {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                  <span className="flex-1 truncate">{artist.name}</span>
-                  {/* Release count — a leaf-green numbered circle (suite
-                      CountBadge): "how many releases under this artist", the
-                      same glyph ndisc uses for a release's disc count. The
-                      square tile / dots stay reserved for tracks. */}
-                  <span className="flex items-center gap-2 shrink-0">
-                    {artist.videoCount > 0 && (
-                      <span
-                        className="inline-flex items-center gap-0.5 text-mauve"
-                        title={`${artist.videoCount} video file${artist.videoCount === 1 ? "" : "s"}`}
-                      >
-                        <Film size={12} className="shrink-0" />
-                        <span className="text-[10px]">{artist.videoCount}</span>
-                      </span>
-                    )}
-                    <CoverageBar cov={artistCoverage} />
-                    <ReleaseTree n={artist.albums.length} />
+                  {/* Expand toggle — a square box carrying the name pill's
+                      accent fill, chevron centered (mirrors the trailing block's
+                      filled treatment on the left end of the row). */}
+                  <span
+                    className="shrink-0 inline-flex items-center justify-center h-6 w-6
+                               bg-accent/10 group-hover/row:bg-accent/25 text-accent
+                               transition-colors"
+                    aria-hidden="true"
+                  >
+                    {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                  </span>
+                  <span className="flex-1 truncate min-w-0 px-2 py-0.5 bg-accent/10 group-hover/row:bg-accent/25 text-accent font-medium text-sm transition-colors">
+                    {artist.name}
                   </span>
                 </button>
-                <button
-                  onClick={() => onSampleScope(artist.name, allArtistTracks)}
-                  title={artistDotTitle}
-                  className="ml-2 shrink-0 inline-flex items-center justify-center
-                             h-5 px-1.5 rounded bg-mauve/20 hover:bg-mauve/30
-                             transition-colors"
-                  aria-label={`Sample all tracks by ${artist.name}`}
-                >
+                {artist.videoCount > 0 && (
                   <span
-                    className={cn("w-2.5 h-2.5 rounded-full transition-colors", artistDot)}
-                  />
-                </button>
+                    className="shrink-0 inline-flex items-center gap-0.5 text-mauve"
+                    title={`${artist.videoCount} video file${artist.videoCount === 1 ? "" : "s"}`}
+                  >
+                    <Film size={12} className="shrink-0" />
+                    <span className="text-[10px]">{artist.videoCount}</span>
+                  </span>
+                )}
+                {/* Trailing status block — ONE continuous strip carrying the
+                    count badge's fill, so the coverage bar + both dots read as
+                    the same block as the count they sit beside (not transparent,
+                    not their own contrasting chips). rounded-tr forms the row's
+                    corner. The accent name pill is the row's only other block. */}
+                <div className="shrink-0 flex items-center gap-1 pl-2 pr-1 py-0.5 bg-medium/15 group-hover/row:bg-medium/25 rounded-tr-xl transition-colors">
+                  {/* Progress bar — duration-weighted clip coverage of the scope. */}
+                  <CoverageBar cov={artistCoverage} />
+                  {/* Clipped status (read-only): does a clip exist in this scope. */}
+                  <span
+                    className="inline-flex items-center justify-center"
+                    title={
+                      sampledHere > 0
+                        ? `${sampledHere} of ${allArtistTracks.length} tracks clipped`
+                        : "No clips yet"
+                    }
+                  >
+                    <span
+                      className={cn(
+                        "w-2.5 h-2.5 rounded-full transition-colors",
+                        sampledHere > 0 ? "bg-medium" : "bg-muted/40",
+                      )}
+                    />
+                  </span>
+                  {/* Sample action (dot = published-to-Nostr state): click to clip. */}
+                  <button
+                    onClick={() => onSampleScope(artist.name, allArtistTracks)}
+                    title={artistDotTitle}
+                    className="inline-flex items-center justify-center rounded px-0.5
+                               hover:bg-fg/10 transition-colors"
+                    aria-label={`Sample all tracks by ${artist.name}`}
+                  >
+                    <span
+                      className={cn(
+                        "w-2.5 h-2.5 rounded-full transition-colors",
+                        publishedHere > 0 ? "bg-nostr" : "bg-muted/30",
+                      )}
+                    />
+                  </button>
+                  {/* Release count — click toggles the group. Ref: ndisc/nplay. */}
+                  <button
+                    onClick={() => toggleArtist(artist.name)}
+                    title={`${artist.albums.length} release${artist.albums.length === 1 ? "" : "s"}`}
+                    className="min-w-[1.75rem] px-1 text-medium text-[11px] tabular-nums text-center"
+                  >
+                    {artist.albums.length}
+                  </button>
+                </div>
               </div>
               {isOpen &&
                 artist.albums.map((album) => {
@@ -572,11 +620,15 @@ export function LibraryTree({
                         : `Sample ${album.tracks.length} tracks from this release — 10s each`;
                   return (
                     <div key={key}>
-                      <div className={cn("w-full flex items-center pr-2 hover:bg-surface/20", D.album)}>
+                      {/* Release row: the whole left side (chevron · title ·
+                          bar · dots) is ONE continuous filled block; the only
+                          break is the gap before the [o] sample indicator. */}
+                      <div className={cn("group/album w-full flex items-stretch pr-2", D.album)}>
                         <button
                           onClick={() => toggleAlbum(key)}
-                          className="flex-1 min-w-0 flex items-center gap-2 pl-8 pr-2
-                                     text-left text-fg italic text-sm"
+                          className="flex-1 min-w-0 flex items-center gap-1.5 pl-8 pr-2 py-0.5
+                                     text-left text-fg italic text-sm
+                                     bg-opus/15 group-hover/album:bg-opus/25 transition-colors"
                         >
                           {alOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                           <span className="flex-1 truncate">{album.name}</span>
@@ -610,8 +662,8 @@ export function LibraryTree({
                             )
                           }
                           title={alDotTitle}
-                          className="ml-2 shrink-0 inline-flex items-center justify-center
-                                     h-5 px-1.5 rounded bg-mauve/20 hover:bg-mauve/30
+                          className="shrink-0 inline-flex items-center justify-center
+                                     px-1.5 rounded-tr-xl bg-opus/15 group-hover/album:bg-opus/25
                                      transition-colors"
                           aria-label={`Sample release ${album.name}`}
                         >
@@ -677,12 +729,12 @@ export function LibraryTree({
                               ) : (
                                 <span aria-hidden className="block w-4 h-4" />
                               )}
-                              <span className="truncate text-fg/80">{t._track}</span>
+                              <span className="truncate text-fg">{t._track}</span>
                               <span className={cn(VERDICT_COLOR[t.verdict])}>{t.verdict}</span>
                               <span className="text-right text-muted">
                                 {t.peak !== null ? `${t.peak >= 0 ? "+" : ""}${t.peak.toFixed(1)} dB` : ""}
                               </span>
-                              <span className="flex items-center justify-end gap-1 text-muted">
+                              <span className="flex items-center justify-end gap-1 text-fg/70">
                                 {t.sr ? `${t.sr.toLocaleString()} Hz` : ""}
                                 {t.hires && (
                                   <span
@@ -760,7 +812,7 @@ export function LibraryTree({
                             <span className="flex items-center justify-center text-mauve">
                               <Film size={11} />
                             </span>
-                            <span className="truncate text-fg/80">{v._track}</span>
+                            <span className="truncate text-fg">{v._track}</span>
                             <span className="text-mauve">video</span>
                             <span className="text-right text-muted" />
                             <span className="text-right text-muted" />

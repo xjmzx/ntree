@@ -47,7 +47,7 @@ export function Section({
   return (
     <section
       className={cn(
-        "rounded-xl bg-panel border border-surface/60 shadow-md",
+        "rounded-xl bg-panel shadow-md",
         hasBody ? "p-4 flex flex-col gap-3" : "px-4 py-2 flex flex-col",
         className,
       )}
