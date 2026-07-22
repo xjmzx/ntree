@@ -1257,6 +1257,12 @@ export default function App() {
                   playingSig === sourceSignature(selectedRow.path, libRoot)
                 }
                 onPlay={() => selectedRow && playSample(selectedRow)}
+                rowPlaying={playingSig !== null || srcPlay !== null}
+                onWaveformPlay={() => {
+                  clearAudio();
+                  setPlayingSig(null);
+                  setSrcPlay(null);
+                }}
                 onCollapse={() => setLeftCollapsed(true)}
               />
               <PublishPanel

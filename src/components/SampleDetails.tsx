@@ -1,11 +1,13 @@
 import type { ReactNode } from "react";
 import { Pause, Play } from "lucide-react";
 import { Section } from "./Section";
+import { Waveform } from "./Waveform";
 import { cn } from "../lib/cn";
 import { type ScanRow, type Verdict } from "../lib/tauri";
 import { sampleDestPath, splitPath } from "../lib/paths";
 
 const SAMPLE_SECS = 10;
+const SAMPLE_START_OFFSET_SECS = 30;
 
 const VERDICT_COLOR: Record<Verdict, string> = {
   LOSSLESS: "text-ok",
@@ -23,6 +25,10 @@ interface SampleDetailsProps {
   hasClip: boolean;
   isPlaying: boolean;
   onPlay: () => void;
+  /** A row's clip/source is playing in the tree — pause the waveform. */
+  rowPlaying: boolean;
+  /** The waveform started playing — stop the tree's clip/source playback. */
+  onWaveformPlay: () => void;
   /** Collapse the whole left flank (Sample + Publish together). */
   onCollapse: () => void;
 }
@@ -37,9 +43,13 @@ export function SampleDetails({
   hasClip,
   isPlaying,
   onPlay,
+  rowPlaying,
+  onWaveformPlay,
   onCollapse,
 }: SampleDetailsProps) {
   const has = !!row;
+  const sampleStart = hasClip ? SAMPLE_START_OFFSET_SECS : undefined;
+  const sampleEnd = hasClip ? SAMPLE_START_OFFSET_SECS + SAMPLE_SECS : undefined;
   const name = row ? row.path.split("/").pop() ?? row.path : "—";
 
   // from = the source track under the library root; to = the 10s clip under
@@ -153,6 +163,23 @@ export function SampleDetails({
           </span>
         )}
       </div>
+
+      {/* Source-track waveform — scrub + play the full track; the sampled 10s is
+          marked. Read-only (ntree navigates, it doesn't edit). */}
+      {has && (
+        <div className="border-t border-surface/50 pt-2">
+          <div className="text-muted text-[10px] uppercase tracking-wide mb-1.5">
+            source waveform
+          </div>
+          <Waveform
+            path={row?.path ?? null}
+            sampleStart={sampleStart}
+            sampleEnd={sampleEnd}
+            onPlayStart={onWaveformPlay}
+            pauseWhen={rowPlaying}
+          />
+        </div>
+      )}
     </Section>
   );
 }
