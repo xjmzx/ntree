@@ -660,7 +660,7 @@ export function LibraryTree({
                           <span className="flex items-center justify-end gap-1.5 shrink-0">
                             {album.videos.length > 0 && (
                               <span
-                                className="inline-flex items-center gap-0.5 text-mauve"
+                                className="inline-flex items-center gap-0.5 text-mauve/60"
                                 title={`${album.videos.length} video file${album.videos.length === 1 ? "" : "s"}`}
                               >
                                 <Film size={11} className="shrink-0" />
@@ -850,7 +850,7 @@ export function LibraryTree({
                               <Film size={11} />
                             </span>
                             <span className="truncate text-fg">{v._track}</span>
-                            <span className="text-mauve">video</span>
+                            <span className="text-mauve/60">video</span>
                             <span className="text-right text-muted" />
                             <span className="text-right text-muted" />
                             {/* no Opus for video — empty cell keeps the columns
