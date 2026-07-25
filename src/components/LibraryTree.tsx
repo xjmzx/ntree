@@ -521,41 +521,56 @@ export function LibraryTree({
                   bar · clipped dot · sample/published dot · release count). The
                   count badge is flush-right with rounded-tr so it gives the row
                   its top-right corner. Ref: nplay LibraryTree. */}
-              <div className={cn("group/row w-full flex items-center pl-2 pr-2 hover:bg-fg/5 transition-colors", D.artist)}>
+              {/* Density scales the colour blocks (chevron box · name pill ·
+                  trailing status block) via items-stretch + per-block padding,
+                  so the filled backgrounds grow vertically rather than leaving
+                  a gap around fixed-height pills. */}
+              <div className="group/row w-full flex items-stretch pl-2 pr-2 hover:bg-fg/5 transition-colors">
                 <button
                   onClick={() => toggleArtist(artist.name)}
-                  className="flex-1 min-w-0 flex items-center gap-1.5 text-left"
+                  className="flex-1 min-w-0 flex items-stretch gap-1.5 text-left"
                 >
-                  {/* Expand toggle — a square box carrying the name pill's
-                      accent fill, chevron centered (mirrors the trailing block's
-                      filled treatment on the left end of the row). */}
+                  {/* Expand toggle — a box carrying the name pill's accent fill,
+                      chevron centered (mirrors the trailing block's filled
+                      treatment on the left end of the row). self-stretch keeps
+                      its fill the full row height as density scales. */}
                   <span
-                    className="shrink-0 inline-flex items-center justify-center h-6 w-6
+                    className="shrink-0 inline-flex items-center justify-center w-6 self-stretch
                                bg-accent/10 group-hover/row:bg-accent/25 text-accent
                                transition-colors"
                     aria-hidden="true"
                   >
                     {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                   </span>
-                  <span className="flex-1 truncate min-w-0 px-2 py-0.5 bg-accent/10 group-hover/row:bg-accent/25 text-accent font-medium text-sm transition-colors">
-                    {artist.name}
+                  {/* Outer span = the density-scaled fill (flex items-center so
+                      the name stays centred at any height); inner span carries
+                      the truncation (which a flex parent would otherwise break). */}
+                  <span className={cn("flex-1 min-w-0 flex items-center px-2 bg-accent/10 group-hover/row:bg-accent/25 text-accent font-medium text-sm transition-colors", D.artist)}>
+                    <span className="truncate min-w-0">{artist.name}</span>
                   </span>
                 </button>
-                {artist.videoCount > 0 && (
-                  <span
-                    className="shrink-0 inline-flex items-center gap-0.5 text-mauve"
-                    title={`${artist.videoCount} video file${artist.videoCount === 1 ? "" : "s"}`}
-                  >
-                    <Film size={12} className="shrink-0" />
-                    <span className="text-[10px]">{artist.videoCount}</span>
-                  </span>
-                )}
                 {/* Trailing status block — ONE continuous strip carrying the
-                    count badge's fill, so the coverage bar + both dots read as
-                    the same block as the count they sit beside (not transparent,
-                    not their own contrasting chips). rounded-tr forms the row's
-                    corner. The accent name pill is the row's only other block. */}
-                <div className="shrink-0 flex items-center gap-1 pl-2 pr-1 py-0.5 bg-medium/15 group-hover/row:bg-medium/25 rounded-tr-xl transition-colors">
+                    count badge's fill, so the video marker + coverage bar + both
+                    dots read as the same block as the count they sit beside (not
+                    transparent, not their own contrasting chips). rounded-tr
+                    forms the row's corner. The accent name pill is the row's
+                    only other block. */}
+                <div className={cn("shrink-0 flex items-center gap-1 pl-2 pr-1 bg-medium/15 group-hover/row:bg-medium/25 rounded-tr-xl transition-colors", D.artist)}>
+                  {/* Video-file marker — lives inside the filled status block
+                      (mirrors the album row's Film marker), so it tracks the
+                      block fill + density instead of floating bare in the gap.
+                      Muted mauve (not full) so it sits back into the subtle
+                      status strip rather than shouting over the accent/10 +
+                      medium/15 fills around it. */}
+                  {artist.videoCount > 0 && (
+                    <span
+                      className="inline-flex items-center gap-0.5 text-mauve/60"
+                      title={`${artist.videoCount} video file${artist.videoCount === 1 ? "" : "s"}`}
+                    >
+                      <Film size={12} className="shrink-0" />
+                      <span className="text-[10px]">{artist.videoCount}</span>
+                    </span>
+                  )}
                   {/* Progress bar — duration-weighted clip coverage of the scope. */}
                   <CoverageBar cov={artistCoverage} />
                   {/* Clipped status (read-only): does a clip exist in this scope. */}
@@ -623,12 +638,20 @@ export function LibraryTree({
                       {/* Release row: the whole left side (chevron · title ·
                           bar · dots) is ONE continuous filled block; the only
                           break is the gap before the [o] sample indicator. */}
-                      <div className={cn("group/album w-full flex items-stretch pr-2", D.album)}>
+                      {/* Density scales the height of the colour blocks
+                          themselves (the opus title block + the items-stretch
+                          sample button), not the outer wrapper — so the filled
+                          background extends vertically instead of opening a gap
+                          around a fixed-height block. */}
+                      <div className="group/album w-full flex items-stretch pr-2">
                         <button
                           onClick={() => toggleAlbum(key)}
-                          className="flex-1 min-w-0 flex items-center gap-1.5 pl-8 pr-2 py-0.5
-                                     text-left text-fg italic text-sm
-                                     bg-opus/15 group-hover/album:bg-opus/25 transition-colors"
+                          className={cn(
+                            "flex-1 min-w-0 flex items-center gap-1.5 pl-8 pr-2",
+                            D.album,
+                            "text-left text-fg italic text-sm",
+                            "bg-opus/15 group-hover/album:bg-opus/25 transition-colors",
+                          )}
                         >
                           {alOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
                           <span className="flex-1 truncate">{album.name}</span>
@@ -797,16 +820,30 @@ export function LibraryTree({
                           excerpt, and a music video's audio counts. Double-click
                           reveals in folder. */}
                       {alOpen &&
-                        album.videos.map((v) => (
+                        album.videos.map((v, vi) => {
+                          // Video rows share the audio rows' row theming so the
+                          // open release reads as one striped, selectable body:
+                          // the zebra index continues past the audio tracks
+                          // (rather than resetting), and a video can be selected
+                          // into the Sample panel — its audio is sampleable.
+                          // text-fg/70 stays as the "not analysed" signal on the
+                          // row's own cells.
+                          const vSig = signatureOf(v);
+                          const vSelected = selectedSig === vSig;
+                          const zebra = (album.tracks.length + vi) % 2 === 1;
+                          return (
                           <div
                             key={v.path}
+                            onClick={() => onSelect(v)}
                             onDoubleClick={() => openTrackFolder(v)}
                             title={`${v.path} · video (not analysed)`}
                             className={cn(
                               "grid grid-cols-[16px_1fr_120px_90px_112px_56px_96px] gap-2 items-center",
-                              "pl-12 pr-3 text-xs font-mono",
+                              "pl-12 pr-3 text-xs font-mono cursor-pointer text-fg/70",
                               D.track,
-                              "hover:bg-surface/40 text-fg/70",
+                              "hover:bg-surface/40",
+                              zebra && "bg-bg/40",
+                              vSelected && "bg-accent/15 hover:bg-accent/20",
                             )}
                           >
                             <span className="flex items-center justify-center text-mauve">
@@ -821,7 +858,8 @@ export function LibraryTree({
                             <span aria-hidden className="block w-4 h-4" />
                             <ClipBar duration={v.durationSecs} sampled={hasSample(v)} />
                           </div>
-                        ))}
+                          );
+                        })}
                     </div>
                   );
                 })}
