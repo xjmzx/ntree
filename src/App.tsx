@@ -960,12 +960,13 @@ export default function App() {
             })()}
           </div>
         )}
-        {/* Right grid slot — forget-identity button (status now lives in the
-            version chip, top-left). Balances the 1fr title column so the
-            middle module stays centered. */}
+        {/* RIGHT — controls, in the suite grammar order (SUITE.md § Top-bar
+            grammar): app-work | nostr identity | view-switch (always last),
+            each group divider-separated. Balances the 1fr title column so the
+            middle module stays centred. */}
         <div className="hidden md:flex items-center justify-end gap-2 mt-1">
-          {/* Library row density — mirrors nsmpl's control so the two libraries
-              compact + expand consistently. */}
+          {/* app-work group — library row density (mirrors nsmpl's control so
+              the two libraries compact + expand consistently). */}
           <Segmented
             label="rows"
             icon={<Rows3 size={14} />}
@@ -977,9 +978,26 @@ export default function App() {
             ]}
             onChange={setDensity}
           />
-          {/* view-switch group — Home first, then the alt views; the active
-              view is always lit, and Home is the single way back (matches
-              ndisc). Borrows ndisc's digital-tone toolbar button. */}
+          {/* nostr identity group — forget-identity, before the view-switch per
+              the grammar; only when signed in. Now the shared mauve-tone
+              ToolbarIconButton (was a one-off solid-mauve button). Sign-in
+              itself lives in the NostrPanel. */}
+          {identity && (
+            <>
+              <span className="w-px h-6 bg-surface shrink-0" aria-hidden="true" />
+              <ToolbarIconButton
+                tone="mauve"
+                title="Signed in — click to forget the nsec from the OS keychain"
+                onClick={handleForgetIdentity}
+              >
+                <LogOut size={14} />
+              </ToolbarIconButton>
+            </>
+          )}
+          {/* view-switch group — always last: Home first, then the alt views;
+              the active view is always lit, and Home is the single way back
+              (matches ndisc). */}
+          <span className="w-px h-6 bg-surface shrink-0" aria-hidden="true" />
           <ToolbarIconButton
             tone="digital"
             pressed={view === "library"}
@@ -1012,20 +1030,6 @@ export default function App() {
           >
             <LineChart size={14} />
           </ToolbarIconButton>
-          {/* Forget-identity chip — only when signed in (the ndisc/smpl
-              pattern). Sign-in itself lives in the NostrPanel. */}
-          {identity && (
-            <button
-              type="button"
-              onClick={handleForgetIdentity}
-              title="Signed in — click to forget the nsec from the OS keychain"
-              aria-label="Forget identity"
-              className="p-2 rounded-md bg-mauve text-bg hover:bg-mauve/80
-                         inline-flex items-center transition-colors cursor-pointer shrink-0"
-            >
-              <LogOut size={14} />
-            </button>
-          )}
         </div>
       </header>
 
