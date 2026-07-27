@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { LeafDots } from "./LeafIcon";
 import { cn } from "../lib/cn";
-import { splitPath } from "../lib/paths";
+import { splitPath, collapseDiscAlbum } from "../lib/paths";
 import { openFolder, type HiRes, type ScanRow, type Verdict } from "../lib/tauri";
 
 // Hi-res badge — sits beside the sample rate because it qualifies exactly that
@@ -248,10 +248,14 @@ function group(rows: ScanRow[], root: string): Artist[] {
   const byArtist = new Map<string, Map<string, TrackRow[]>>();
   for (const r of rows) {
     const [artist, album, track] = splitPath(r.path, root);
+    // Collapse multi-disc sibling folders (…/Album/CD1, …/Album/CD2) into one
+    // album NODE, but keep the raw per-disc `_album` so file-path rebuilds
+    // (openTrackFolder) and the mirror/sample paths stay per-disc.
+    const albumKey = collapseDiscAlbum(album);
     const albums = byArtist.get(artist) ?? new Map<string, TrackRow[]>();
     if (!byArtist.has(artist)) byArtist.set(artist, albums);
-    const tracks = albums.get(album) ?? [];
-    if (!albums.has(album)) albums.set(album, tracks);
+    const tracks = albums.get(albumKey) ?? [];
+    if (!albums.has(albumKey)) albums.set(albumKey, tracks);
     tracks.push({ ...r, _artist: artist, _album: album, _track: track });
   }
   const out: Artist[] = [];
@@ -265,7 +269,17 @@ function group(rows: ScanRow[], root: string): Artist[] {
       // audio logic operates on `tracks` exactly as before.
       const tracks = allRows.filter((r) => !isVideoRow(r));
       const videos = allRows.filter(isVideoRow);
+      // Order discs first (CD1 before CD2), then filename. Disc number comes
+      // from the raw `_album`'s trailing disc segment (ntree reads no DISCNUMBER
+      // tag); non-disc albums share a constant `_album`, so this reduces to a
+      // plain filename sort.
+      const discOf = (r: TrackRow): number => {
+        const seg = r._album.split("/").pop() ?? "";
+        const m = /^(?:cd|disc|disk)[ ._-]*([0-9]+)/i.exec(seg);
+        return m ? parseInt(m[1], 10) : 0;
+      };
       const cmp = (a: TrackRow, b: TrackRow) =>
+        discOf(a) - discOf(b) ||
         a._track.toLowerCase().localeCompare(b._track.toLowerCase());
       tracks.sort(cmp);
       videos.sort(cmp);

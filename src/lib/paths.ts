@@ -15,6 +15,34 @@ export function splitPath(fp: string, root: string): [string, string, string] {
   return ["(unknown)", "(no album)", parts[0] ?? rel];
 }
 
+/** Does this path segment name a disc subfolder — "CD1", "CD 2", "Disc 3",
+ *  "Disk1", …? Kept deliberately in step with the suite reference (nsmpl
+ *  `is_disc_dir_name`, src-tauri/src/lib.rs) so multi-disc release layouts
+ *  collapse identically across ndisc/nplay/ntree/nsmpl. */
+export function isDiscDirName(name: string): boolean {
+  const n = name.trim().toLowerCase();
+  for (const prefix of ["cd", "disc", "disk"]) {
+    if (n.startsWith(prefix)) {
+      const rest = n.slice(prefix.length).replace(/^[ ._-]+/, "");
+      if (/^[0-9]/.test(rest)) return true;
+    }
+  }
+  return false;
+}
+
+/** Collapse a multi-disc album path to its release folder: when the album's
+ *  last path segment names a disc ("100lbs/CD1" → "100lbs"), drop it so both
+ *  discs land under one album node. DISPLAY-only — this must never feed
+ *  `splitPath`, `uniquePairs`, `sourceSignature`, `sampleDestPath`, or the
+ *  per-track `_album` used to rebuild file paths, all of which stay per-disc. */
+export function collapseDiscAlbum(album: string): string {
+  const parts = album.split("/");
+  if (parts.length >= 2 && isDiscDirName(parts[parts.length - 1])) {
+    return parts.slice(0, -1).join("/");
+  }
+  return album;
+}
+
 /** Distinct (artist, release) pairs across a set of scan rows. */
 export function uniquePairs(rows: ScanRow[], libRoot: string): MirrorPair[] {
   const seen = new Set<string>();
