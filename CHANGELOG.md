@@ -17,7 +17,21 @@ ndisc's `published.json` manifest, and `~/.config/ndisc-suite/roots.json`).
 > The **0.2.7** entry covers a six-week, 37-commit stretch that was tagged only
 > at the end of it.
 
-## 0.3.1 — unreleased
+## 0.3.1 — 2026-07-27
+
+### Multi-disc folder collapse (display)
+- Sibling disc folders (`…/Album/CD1`, `…/Album/CD2`) now collapse into a single
+  album node in the library tree, matching nsmpl/nplay. The collapse lives only in
+  the display grouping (`collapseDiscAlbum` in `group()`): `splitPath` and the raw
+  per-track `_album` are left untouched, so the mirror/sample/publish paths stay
+  per-disc (no orphaning). Tracks order by disc then filename. `isDiscDirName`
+  vendored, kept in step with the suite.
+
+### Suite top-bar grammar + version chip
+- The version chip shows only `major.minor.patch` (suffix → tooltip,
+  `shortVersion`), replacing the old status-folding chip; the density selector
+  moves into the left identity zone as a bare Segmented (shared placement with
+  nsmpl); mauve active state; the right-zone toolbar ordered to the suite grammar.
 
 ### Hi-res verification
 - The spectral test catches lossy pretending to be lossless. This catches the
