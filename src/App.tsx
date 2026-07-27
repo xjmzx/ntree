@@ -3,7 +3,6 @@ import type { ReactNode } from "react";
 import {
   AlertTriangle,
   ArrowRightLeft,
-  Check,
   Film,
   FolderTree,
   Home,
@@ -12,12 +11,10 @@ import {
   Lock,
   LogOut,
   Radio,
-  Rows3,
   Table,
 } from "lucide-react";
 import { getVersion } from "@tauri-apps/api/app";
 import { SimplePool } from "nostr-tools";
-import { cn } from "./lib/cn";
 import { ScannerControls } from "./components/ScannerControls";
 import { SamplerPanel } from "./components/SamplerPanel";
 import { CompressPanel } from "./components/CompressPanel";
@@ -83,15 +80,6 @@ const PROFILE_RELAYS = ["wss://relay.fizx.uk"];
 /** Monochrome is the default: chrome greyscale, meaning keeps its colour. */
 type Theme = "fizx" | "upleb" | "mono";
 
-// Header status chip — tone-tinted background + text per tone.
-// Enumerated literal classes so Tailwind JIT sees them at build time.
-const TONE_CHIP: Record<"muted" | "warn" | "ok" | "alert", string> = {
-  muted: "bg-surface/50 text-fg/80",
-  warn: "bg-warn/15 text-warn",
-  ok: "bg-ok/15 text-ok",
-  alert: "bg-alert/15 text-alert",
-};
-
 interface ProfileMeta {
   name?: string;
   display_name?: string;
@@ -112,6 +100,14 @@ type Density = "super-slim" | "slim" | "wide";
 function loadDensity(): Density {
   const v = localStorage.getItem(DENSITY_KEY);
   return v === "wide" || v === "super-slim" ? v : "slim";
+}
+
+// Suite rule (n-suite headers): the version chip shows only
+// major.minor.patch; any pre-release/build suffix (…-beta.2, +build) drops
+// to the tooltip so the chip keeps a fixed, consistent width as releases
+// move from 0.2.0-beta.2 toward 1.3.1.
+function shortVersion(v: string): string {
+  return v.split(/[-+]/)[0];
 }
 
 export default function App() {
@@ -168,7 +164,11 @@ export default function App() {
   // NB "released" (this: a kind:31237 RELEASE, per ndisc) is a different fact
   // from `publishedSignatures` below (a kind:1063 CLIP, published by ntree).
   const [manifest, setManifest] = useState<PublishedManifest | null>(null);
-  const [status, setStatus] = useState<{ text: string; tone: "muted" | "warn" | "ok" | "alert" }>(
+  // Operation status is still tracked (scan/sample/compress lifecycles call
+  // setStatus), but the header no longer renders it — the version chip is now
+  // plain, and scan progress shows in the SCANNING row. Value intentionally
+  // unread; kept as a seam for a future status surface.
+  const [, setStatus] = useState<{ text: string; tone: "muted" | "warn" | "ok" | "alert" }>(
     { text: "ready", tone: "muted" },
   );
   const [identity, setIdentity] = useState<Identity | null>(null);
@@ -864,7 +864,7 @@ export default function App() {
     <div className="h-screen p-6 max-w-[1500px] mx-auto flex flex-col gap-4">
       <header className="shrink-0 rounded-lg bg-panel shadow-md
                          px-4 py-3 flex md:grid md:grid-cols-[1fr_auto_1fr]
-                         items-start gap-4">
+                         items-center gap-4">
         <div className="flex items-center gap-3 shrink-0">
           <button
             type="button"
@@ -883,46 +883,40 @@ export default function App() {
             <span className="text-accent">n</span>
             <span className="text-mauve">tree</span>
           </button>
-          {appVersion &&
-            (() => {
-              // The version chip doubles as the status surface: at rest it's
-              // just the version; when there's something to say ("not ready")
-              // it extends to a tinted status with the version dimmed beside it.
-              const idle = status.text === "ready";
-              const icon =
-                status.tone === "ok" ? (
-                  <Check size={12} />
-                ) : status.tone === "warn" || status.tone === "alert" ? (
-                  <AlertTriangle size={12} />
-                ) : null;
-              return (
-                <span
-                  className={cn(
-                    "hidden md:inline-flex items-center gap-1.5 px-2.5 py-2",
-                    "rounded-md font-mono text-xs shrink-0 max-w-[28rem]",
-                    idle ? "bg-surface text-mauve" : TONE_CHIP[status.tone],
-                  )}
-                  title={idle ? `v${appVersion}` : status.text}
-                >
-                  {!idle && (
-                    <>
-                      {icon}
-                      <span className="truncate">{status.text}</span>
-                    </>
-                  )}
-                  <span className={idle ? undefined : "text-fg/40 shrink-0"}>
-                    v{appVersion}
-                  </span>
-                </span>
-              );
-            })()}
+          {/* Plain version chip (suite standard). It used to fold in scan /
+              sample / compress status, but scan progress already has the
+              SCANNING row under the source/dest/compress strip, so the chip is
+              back to just the version — consistent with nsmpl/ndisc/nplay. */}
+          {appVersion && (
+            <span
+              className="hidden md:inline-flex items-center px-2.5 py-2
+                         rounded-md bg-surface text-mauve font-mono text-xs
+                         shrink-0"
+              title={`v${appVersion}`}
+            >
+              v{shortVersion(appVersion)}
+            </span>
+          )}
+          {/* Density selector beside the version, bare — shared placement +
+              styling with nsmpl (SUITE.md § Top-bar grammar). */}
+          <Segmented
+            label="density"
+            bare
+            value={density}
+            options={[
+              { value: "super-slim", label: "super" },
+              { value: "slim", label: "slim" },
+              { value: "wide", label: "wide" },
+            ]}
+            onChange={setDensity}
+          />
         </div>
         {/*
           Last-scan module: 5-segment proportional verdict bar in the middle
           grid column (1fr_auto_1fr), centered between title and right edge.
         */}
         {report && (
-          <div className="hidden md:flex flex-col items-center gap-1.5 min-w-[520px] mt-1">
+          <div className="hidden md:flex flex-col items-center gap-1.5 min-w-[520px]">
             {(() => {
               // Denominator excludes video so the audio-verdict segments fill
               // the bar correctly (counts already exclude video).
@@ -964,27 +958,12 @@ export default function App() {
             grammar): app-work | nostr identity | view-switch (always last),
             each group divider-separated. Balances the 1fr title column so the
             middle module stays centred. */}
-        <div className="hidden md:flex items-center justify-end gap-2 mt-1">
-          {/* app-work group — library row density (mirrors nsmpl's control so
-              the two libraries compact + expand consistently). */}
-          <Segmented
-            label="rows"
-            icon={<Rows3 size={14} />}
-            value={density}
-            options={[
-              { value: "super-slim", label: "super" },
-              { value: "slim", label: "slim" },
-              { value: "wide", label: "wide" },
-            ]}
-            onChange={setDensity}
-          />
-          {/* nostr identity group — forget-identity, before the view-switch per
-              the grammar; only when signed in. Now the shared mauve-tone
-              ToolbarIconButton (was a one-off solid-mauve button). Sign-in
-              itself lives in the NostrPanel. */}
+        <div className="hidden md:flex items-center justify-end gap-2">
+          {/* nostr identity group — forget-identity, divider-separated before
+              the view-switch per the grammar; only when signed in. (Row density
+              moved to the left identity zone beside the version.) */}
           {identity && (
             <>
-              <span className="w-px h-6 bg-surface shrink-0" aria-hidden="true" />
               <ToolbarIconButton
                 tone="mauve"
                 title="Signed in — click to forget the nsec from the OS keychain"
@@ -992,12 +971,12 @@ export default function App() {
               >
                 <LogOut size={14} />
               </ToolbarIconButton>
+              <span className="w-px h-6 bg-surface shrink-0" aria-hidden="true" />
             </>
           )}
           {/* view-switch group — always last: Home first, then the alt views;
               the active view is always lit, and Home is the single way back
               (matches ndisc). */}
-          <span className="w-px h-6 bg-surface shrink-0" aria-hidden="true" />
           <ToolbarIconButton
             tone="digital"
             pressed={view === "library"}
@@ -1455,22 +1434,33 @@ function Segmented<T extends string | number>({
   value,
   options,
   onChange,
+  bare,
 }: {
   label: string;
   icon?: ReactNode;
   value: T;
   options: { value: T; label: string }[];
   onChange: (v: T) => void;
+  // `bare` drops the icon/label prefix — just the segmented buttons. Label
+  // rides on the wrapper for tooltip + a11y. Shared look with nsmpl
+  // (SUITE.md § Top-bar grammar); active state is mauve in both.
+  bare?: boolean;
 }) {
   return (
-    <span className="inline-flex items-center gap-1.5">
-      <span
-        className="text-muted/70 inline-flex items-center"
-        title={label}
-        aria-label={label}
-      >
-        {icon}
-      </span>
+    <span
+      className="inline-flex items-center gap-1.5"
+      title={bare ? label : undefined}
+      aria-label={bare ? label : undefined}
+    >
+      {!bare && (
+        <span
+          className="text-muted/70 inline-flex items-center"
+          title={label}
+          aria-label={label}
+        >
+          {icon}
+        </span>
+      )}
       <span className="inline-flex rounded-md overflow-hidden bg-surface">
         {options.map((opt, i) => (
           <button
@@ -1482,8 +1472,8 @@ function Segmented<T extends string | number>({
               "px-2.5 py-2 text-xs font-mono transition-colors " +
               (i > 0 ? "border-l border-bg/40 " : "") +
               (value === opt.value
-                ? "bg-accent text-bg"
-                : "text-muted hover:text-fg hover:bg-surfaceHover")
+                ? "bg-mauve text-bg"
+                : "text-muted hover:text-mauve hover:bg-mauve/15")
             }
           >
             {opt.label}
