@@ -17,6 +17,46 @@ ndisc's `published.json` manifest, and `~/.config/ndisc-suite/roots.json`).
 > The **0.2.7** entry covers a six-week, 37-commit stretch that was tagged only
 > at the end of it.
 
+## 0.3.2 — 2026-09-02
+
+### macOS builds
+
+- The release workflow now builds a **macOS arm64 `.dmg`** alongside the Linux
+  `.deb`/`.AppImage`. The macOS job runs after the Linux one and only
+  appends its asset, so the Linux job stays the single owner of the release
+  name and notes.
+- Unsigned and un-notarised, like the rest of the suite. Gatekeeper blocks the
+  first launch until the app is opened from the context menu, or cleared with
+  `xattr -dr com.apple.quarantine /Applications/ndisc-tree.app`.
+- **This dmg is untested.** It is known to build; it is not known to run. No
+  macOS build of this app has been launched.
+- Two paths remain **Linux-only at runtime**: `open_folder` shells out to
+  `xdg-open`, and the sudo mirror-tree path to `pkexec`. Both compile on macOS
+  and both fail when called.
+
+### Fixed
+
+- **External tools were invisible to an installed macOS `.app`.** ffmpeg and ffprobe were
+  spawned by bare name, which searches the process PATH — and an app launched
+  from Finder, Spotlight or the Dock inherits launchd's PATH, not a shell's, so
+  Homebrew's `/opt/homebrew/bin` is not on it. `brew install ffmpeg` followed by
+  the app insisting it was "not found on PATH" was the symptom. A new vendored
+  `src-tauri/src/tools.rs` resolves each tool to an absolute path
+  (`NDISC_TOOL_<NAME>` override, then PATH, then the well-known directories),
+  and the not-found message now names the package rather than the binary, says
+  where it looked, and gives the override to set. Only successful lookups are
+  cached, so installing a missing tool takes effect without a restart. Linux is
+  unaffected — ffmpeg lands in `/usr/bin`, which is on every PATH — which is why
+  this went unseen in apps developed there.
+- Batch operations now check for the tools they need **before** they start.
+  A missing ffmpeg previously meant the scan walked the entire library and
+  marked every single file Failed — accurate, and silent about the cause. The
+  five batch entry points fail immediately with a message naming the fix.
+- `workflow_dispatch` checked out the default branch while publishing to the
+  tag it was handed, so a manual run uploaded main-built artifacts to an older
+  tag's release. Checkout now pins `ref` to the tag being released. Tag pushes
+  were never affected.
+
 ## 0.3.1 — 2026-07-27
 
 ### Multi-disc folder collapse (display)
