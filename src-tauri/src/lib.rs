@@ -6,6 +6,10 @@
 //   - load_report / save_report: JSON cache in Tauri app data dir.
 //   - open_folder: xdg-open on the containing folder (double-click action).
 
+// External tools (ffmpeg/ffprobe/aubio) are resolved to an absolute path
+// before spawning — see tools.rs for why PATH alone is not enough.
+mod tools;
+
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::io::Read;
@@ -328,8 +332,37 @@ enum FfprobeOutcome {
     Failed,
 }
 
+/// A `Command` for an external tool, with its path resolved if it can be.
+///
+/// These probe/measure helpers return outcome enums rather than `Result`, so a
+/// missing tool cannot be reported from the call site. Falling back to the bare
+/// name keeps exactly today's behaviour there (the spawn fails, the caller
+/// reports Failed) while letting a resolved absolute path win whenever there is
+/// one. The batch entry points call `require_tools` first, so in practice a
+/// missing tool is reported before any of this runs.
+fn tool_cmd(name: &str) -> Command {
+    match tools::resolve(name) {
+        Some(path) => Command::new(path),
+        None => Command::new(name),
+    }
+}
+
+/// Fail a batch operation up front when a tool it needs is missing.
+///
+/// Without this the operation runs to completion over every file and reports
+/// each one as failed, which is technically true and tells the user nothing.
+/// One check, one message naming the fix.
+fn require_tools(names: &[&str]) -> Result<(), String> {
+    for name in names {
+        if tools::resolve(name).is_none() {
+            return Err(tools::not_found_message(name));
+        }
+    }
+    Ok(())
+}
+
 fn ffprobe_fields(path: &Path) -> FfprobeOutcome {
-    let mut cmd = Command::new("ffprobe");
+    let mut cmd = tool_cmd("ffprobe");
     cmd.args([
         "-v", "error",
         "-select_streams", "a:0",
@@ -396,7 +429,7 @@ fn measure_high_band_peak(path: &Path, cutoff_hz: u32, vol_re: &Regex) -> PeakOu
     // applies the same band-cut to the entire file, so the peak above the
     // cutoff is consistent across the track — no point decoding a 60-min
     // FLAC end to end.
-    let mut cmd = Command::new("ffmpeg");
+    let mut cmd = tool_cmd("ffmpeg");
     cmd.args(["-nostdin", "-t", &ANALYSIS_SECS.to_string(), "-i"])
         .arg(path)
         .args([
@@ -718,7 +751,7 @@ struct VideoProbe {
 /// first real video stream (skipping attached-cover image codecs) and the first
 /// audio stream.
 fn probe_video(path: &Path) -> Option<VideoProbe> {
-    let mut cmd = Command::new("ffprobe");
+    let mut cmd = tool_cmd("ffprobe");
     cmd.args([
         "-v", "error",
         "-show_entries", "stream=codec_type,codec_name",
@@ -859,6 +892,7 @@ struct VideoRow {
 /// the Normalize-videos plan — nothing is modified.
 #[tauri::command]
 async fn classify_videos(root: String) -> Result<Vec<VideoRow>, String> {
+    require_tools(&["ffprobe"])?;
     tauri::async_runtime::spawn_blocking(move || {
         let root_pb = PathBuf::from(&root);
         if !root_pb.is_dir() {
@@ -1039,7 +1073,7 @@ fn normalize_one(
 
     let tmp = dir.join(format!(".ndisc-normalize-{stem}.mp4"));
     let _ = fs::remove_file(&tmp);
-    let mut cmd = Command::new("ffmpeg");
+    let mut cmd = tool_cmd("ffmpeg");
     cmd.arg("-nostdin").arg("-i").arg(src);
     for a in args {
         cmd.arg(a);
@@ -1106,6 +1140,7 @@ async fn normalize_videos(
     app: AppHandle,
     cancel: tauri::State<'_, NormalizeCancel>,
 ) -> Result<NormalizeReport, String> {
+    require_tools(&["ffmpeg"])?;
     let root_pb = PathBuf::from(&root);
     let backup_pb = PathBuf::from(&backup_root);
     if backup_root.trim().is_empty() {
@@ -1361,6 +1396,7 @@ async fn scan_library(
     app: AppHandle,
     cancel: tauri::State<'_, ScanCancel>,
 ) -> Result<ScanReport, String> {
+    require_tools(&["ffprobe", "ffmpeg"])?;
     let flag = cancel.0.clone();
     flag.store(false, Ordering::Relaxed);
     tauri::async_runtime::spawn_blocking(move || scan_inner(root, workers, app, flag))
@@ -1474,7 +1510,7 @@ fn sample_one(
         }
     }
 
-    let mut cmd = Command::new("ffmpeg");
+    let mut cmd = tool_cmd("ffmpeg");
     cmd.args([
         "-nostdin",
         "-ss", &start_offset_secs.to_string(),
@@ -1554,7 +1590,7 @@ fn compress_one(item: &SampleItem) -> (SampleOutcome, Option<String>) {
     }
 
     let bitrate = format!("{OPUS_BITRATE_KBPS}k");
-    let mut cmd = Command::new("ffmpeg");
+    let mut cmd = tool_cmd("ffmpeg");
     cmd.args(["-nostdin", "-i"])
         .arg(src)
         // -vn: audio only. Clips carry no video, but stay defensive for the same
@@ -2041,6 +2077,7 @@ async fn sample_tracks(
     app: AppHandle,
     cancel: tauri::State<'_, SampleCancel>,
 ) -> Result<SampleReport, String> {
+    require_tools(&["ffmpeg"])?;
     let flag = cancel.0.clone();
     flag.store(false, Ordering::Relaxed);
     tauri::async_runtime::spawn_blocking(move || {
@@ -2159,6 +2196,7 @@ async fn compress_tracks(
     app: AppHandle,
     cancel: tauri::State<'_, CompressCancel>,
 ) -> Result<SampleReport, String> {
+    require_tools(&["ffmpeg"])?;
     let flag = cancel.0.clone();
     flag.store(false, Ordering::Relaxed);
     tauri::async_runtime::spawn_blocking(move || compress_inner(items, workers, app, flag))
