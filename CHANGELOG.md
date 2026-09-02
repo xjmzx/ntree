@@ -17,6 +17,31 @@ ndisc's `published.json` manifest, and `~/.config/ndisc-suite/roots.json`).
 > The **0.2.7** entry covers a six-week, 37-commit stretch that was tagged only
 > at the end of it.
 
+## Unreleased
+
+### Fixed — the last two Linux-only runtime paths
+
+- **`open_folder` shelled out to `xdg-open`**, which is Linux's name for that
+  verb and exists nowhere else, so the double-click "open containing folder"
+  action failed on macOS while looking like an app bug. Now goes through
+  `tauri-plugin-opener`, already a dependency and already registered, which
+  picks the right verb per platform.
+- **The sudo mirror-tree path shelled out to `pkexec`.** macOS has no pkexec;
+  its equivalent is AppleScript's `do shell script … with administrator
+  privileges`, which raises the native authorisation panel. Split behind
+  `cfg(target_os)` into a `run_privileged` helper, so Linux keeps polkit
+  unchanged and macOS gets its own prompt. `mirror_tree_pkexec` is renamed
+  `mirror_tree_privileged` — it no longer names a Linux binary.
+- The macOS arm adds AppleScript escaping *on top of* the shell quoting the
+  paths already carry, in that order (backslashes before quotes; the reverse
+  corrupts the path). Album directories contain apostrophes, and `shell_quote`
+  renders those with backslashes, so this is load-bearing. Covered by unit
+  tests and verified end to end against real `osascript` with names containing
+  apostrophes, double quotes and backslashes.
+
+**Not verified:** the authorisation panel itself, which needs an interactive
+password. The escaping and the code paths are tested; the prompt is not.
+
 ## 0.3.2 — 2026-09-02
 
 ### macOS builds

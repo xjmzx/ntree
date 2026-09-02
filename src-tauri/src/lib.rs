@@ -4,7 +4,8 @@
 //   - scan_library: walks <root>/**/*.flac, runs ffprobe + ffmpeg high-pass
 //     volumedetect per file in parallel, emits "scan-progress" events.
 //   - load_report / save_report: JSON cache in Tauri app data dir.
-//   - open_folder: xdg-open on the containing folder (double-click action).
+//   - open_folder: opens the containing folder in the platform's file
+//     manager (double-click action).
 
 // External tools (ffmpeg/ffprobe/aubio) are resolved to an absolute path
 // before spawning — see tools.rs for why PATH alone is not enough.
@@ -1256,7 +1257,7 @@ async fn create_mirror_tree(
 ) -> Result<MirrorResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
         if sudo {
-            mirror_tree_pkexec(dest, source_root, pairs)
+            mirror_tree_privileged(dest, source_root, pairs)
         } else {
             mirror_tree_plain(dest, pairs)
         }
@@ -1296,7 +1297,75 @@ fn mirror_tree_plain(dest: String, pairs: Vec<MirrorPair>) -> Result<MirrorResul
     Ok(MirrorResult { created, skipped, errors })
 }
 
-fn mirror_tree_pkexec(
+/// Escape a string for use inside an AppleScript double-quoted literal.
+///
+/// Backslashes FIRST, then double quotes — reverse the order and the
+/// backslashes the second pass introduces get doubled by the first, silently
+/// corrupting the path. This is load-bearing rather than defensive:
+/// `shell_quote` emits backslashes of its own, rendering an embedded
+/// apostrophe as `'\''`, and album directories do contain apostrophes.
+#[cfg(target_os = "macos")]
+fn applescript_escape(s: &str) -> String {
+    s.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+/// Run a shell script as root, raising whatever authorisation prompt the
+/// platform's GUI uses. Linux has pkexec (polkit); macOS has no such binary,
+/// and its equivalent is AppleScript's `do shell script … with administrator
+/// privileges`, which shows the native panel and runs the command via /bin/sh.
+///
+/// The script's paths are already shell-quoted by `shell_quote` before they get
+/// here; the macOS arm adds AppleScript string escaping on top of that.
+#[cfg(target_os = "macos")]
+fn run_privileged(script: &str) -> Result<(), String> {
+    let escaped = applescript_escape(script);
+    let output = Command::new("osascript")
+        .arg("-e")
+        .arg(format!(
+            "do shell script \"{escaped}\" with administrator privileges"
+        ))
+        .output()
+        .map_err(|e| format!("osascript spawn failed: {e}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let msg = stderr.trim();
+        // -128 is the user dismissing the authorisation panel — not a fault.
+        return Err(if msg.contains("-128") || msg.contains("User canceled") {
+            "authorisation cancelled".to_string()
+        } else if msg.is_empty() {
+            "authorisation failed".to_string()
+        } else {
+            msg.to_string()
+        });
+    }
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn run_privileged(script: &str) -> Result<(), String> {
+    let output = Command::new("pkexec")
+        .arg("sh")
+        .arg("-c")
+        .arg(script)
+        .output()
+        .map_err(|e| format!("pkexec spawn failed (is pkexec installed?): {e}"))?;
+
+    if !output.status.success() {
+        // Code 126/127 = user dismissed / not authorized.
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let code = output.status.code().unwrap_or(-1);
+        let msg = if stderr.trim().is_empty() {
+            "authorization failed".to_string()
+        } else {
+            stderr.trim().to_string()
+        };
+        return Err(format!("pkexec exit {code}: {msg}"));
+    }
+    Ok(())
+}
+
+fn mirror_tree_privileged(
     dest: String,
     source_root: String,
     pairs: Vec<MirrorPair>,
@@ -1349,24 +1418,7 @@ fn mirror_tree_pkexec(
         " && chown -R {uid}:{gid} -- {dest_q} && chmod -R {mode:o} -- {dest_q}"
     ));
 
-    let output = std::process::Command::new("pkexec")
-        .arg("sh")
-        .arg("-c")
-        .arg(&script)
-        .output()
-        .map_err(|e| format!("pkexec spawn failed (is pkexec installed?): {e}"))?;
-
-    if !output.status.success() {
-        // Code 126/127 = user dismissed / not authorized.
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let code = output.status.code().unwrap_or(-1);
-        let msg = if stderr.trim().is_empty() {
-            "authorization failed".to_string()
-        } else {
-            stderr.trim().to_string()
-        };
-        return Err(format!("pkexec exit {code}: {msg}"));
-    }
+    run_privileged(&script)?;
 
     Ok(MirrorResult {
         created: to_create.len(),
@@ -2438,11 +2490,15 @@ fn save_report(report: ScanReport, app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 fn open_folder(path: String) -> Result<(), String> {
-    Command::new("xdg-open")
-        .arg(&path)
-        .spawn()
-        .map_err(|e| format!("xdg-open {path}: {e}"))?;
-    Ok(())
+    // Was a bare `xdg-open` spawn — Linux's name for this verb, and a name that
+    // exists nowhere else, so on macOS the double-click action failed with
+    // "No such file or directory" while looking like an app bug.
+    //
+    // tauri-plugin-opener is already a dependency and already registered in the
+    // builder below, and it picks the right verb per platform (`open` on macOS,
+    // `xdg-open` on Linux, explorer on Windows). No reason to hand-roll that.
+    tauri_plugin_opener::open_path(&path, None::<&str>)
+        .map_err(|e| format!("open {path}: {e}"))
 }
 
 // ---- nostr identity (OS keychain) -------------------------------------
@@ -2854,5 +2910,34 @@ mod guard_tests {
         let elsewhere = tmp("other4").join("f");
         fs::write(&elsewhere, b"x").unwrap();
         assert!(guard_deletable(&dest, &root, &elsewhere).is_err());
+    }
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod applescript_tests {
+    use super::*;
+
+    #[test]
+    fn escapes_backslash_before_quote() {
+        // A backslash must become two, and a quote must gain exactly one
+        // leading backslash — not three, which is what escaping in the other
+        // order produces.
+        assert_eq!(applescript_escape(r#"a\b"c"#), r#"a\\b\"c"#);
+    }
+
+    #[test]
+    fn survives_shell_quoted_apostrophe() {
+        // What shell_quote actually emits for a directory named  Rock 'n' Roll
+        let shell_quoted = shell_quote("Rock 'n' Roll");
+        let escaped = applescript_escape(&shell_quoted);
+        // Every backslash shell_quote produced is doubled for AppleScript.
+        assert_eq!(escaped, shell_quoted.replace('\\', "\\\\"));
+        assert!(escaped.contains("Rock"), "{escaped}");
+    }
+
+    #[test]
+    fn leaves_ordinary_paths_alone() {
+        let q = shell_quote("/Users/me/Music/Album");
+        assert_eq!(applescript_escape(&q), q);
     }
 }
