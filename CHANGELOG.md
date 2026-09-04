@@ -42,6 +42,18 @@ ndisc's `published.json` manifest, and `~/.config/ndisc-suite/roots.json`).
 **Not verified:** the authorisation panel itself, which needs an interactive
 password. The escaping and the code paths are tested; the prompt is not.
 
+### Windows — vendored `tools.rs` only
+
+- The shared `tools.rs` gained a `quiet_command()` that sets `CREATE_NO_WINDOW`,
+  so spawning ffmpeg/ffprobe/aubio no longer gives each child its own console
+  window on Windows. Carried here to keep the file byte-identical across nplay,
+  nsmpl and ntree, as its own header requires.
+- **Inert in this app for now, and unverified.** ntree still does not build on
+  Windows — `mirror_tree_privileged` uses `std::os::unix::fs::MetadataExt`
+  unconditionally (`uid`/`gid`/`mode`), which is four compile errors in one
+  function. ntree's own spawn sites also still go through `tool_cmd()`, which
+  was left alone; they want the same flag once the app compiles there.
+
 ## 0.3.2 — 2026-09-02
 
 ### macOS builds
