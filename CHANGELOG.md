@@ -54,6 +54,19 @@ password. The escaping and the code paths are tested; the prompt is not.
   function. ntree's own spawn sites also still go through `tool_cmd()`, which
   was left alone; they want the same flag once the app compiles there.
 
+### Windows builds — under consideration, not offered
+
+- The suite's release workflow can build a **Windows x86_64 NSIS installer**, and
+  ndisc, nping, nplay and nchat now do. **ntree deliberately does not yet**, and
+  for a harder reason than the others: it does not compile on Windows at all.
+- `mirror_tree_privileged` uses `std::os::unix::fs::MetadataExt` unconditionally
+  (`uid`/`gid`/`mode`) — four errors in one function. Making it compile is small;
+  making it *work* is not. Underneath sits `run_privileged`, whose non-macOS arm
+  shells out to `pkexec sh -c` with a POSIX script (`chown -R`, `chmod -R`).
+  Windows has none of that, and the NTFS equivalent of POSIX ownership is an ACL
+  — a different model, not a different syntax. That is a design decision to take
+  before any installer is worth producing.
+
 ## 0.3.2 — 2026-09-02
 
 ### macOS builds
