@@ -1,7 +1,7 @@
 # Changelog
 
-All notable changes to **ntree** (binary `ndisc-tree`; formerly
-`audio-flac-quality-check-tauri`, then `ndisc.blobtree`, then `ndisc.tree`).
+All notable changes to **ntree** (formerly `audio-flac-quality-check-tauri`,
+then `ndisc.blobtree`, `ndisc.tree` and `ndisc-tree`).
 
 ntree publishes **NIP-94 (kind:1063)** clip metadata and reads **kind:7**
 reactions, but it is *not* a participant in ndisc's `release.vN` wire contract —
@@ -18,6 +18,19 @@ ndisc's `published.json` manifest, and `~/.config/ndisc-suite/roots.json`).
 > at the end of it.
 
 ## Unreleased
+
+### Changed — named ntree everywhere it is shown
+
+- The binary, product name, window title, macOS bundle (`ntree.app`), Linux
+  desktop entry and icon, and the release files built from them are now
+  **ntree**, matching the repo. They were `ndisc-tree` (window title
+  `ndisc.tree`).
+- **Kept on purpose:** the bundle identifier `uk.fizx.audioflacqualitycheck`,
+  the keychain service `audio-flac-quality-check-tauri`, and the localStorage
+  keys. They locate the saved scan report, the nsec and the settings; renaming
+  them would orphan all three.
+- `make install` and `install.sh` remove the old `ndisc-tree` install when they
+  put the new one down.
 
 ### Fixed — the last two Linux-only runtime paths
 

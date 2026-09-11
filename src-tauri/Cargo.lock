@@ -2348,27 +2348,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ndisc-tree"
-version = "0.3.2"
-dependencies = [
- "chrono",
- "keyring",
- "nostr",
- "nostr-sdk",
- "rayon",
- "regex",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-dialog",
- "tauri-plugin-opener",
- "trash",
- "wait-timeout",
- "walkdir",
-]
-
-[[package]]
 name = "ndk"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2479,6 +2458,27 @@ dependencies = [
  "nostr-database",
  "nostr-relay-pool",
  "tokio",
+]
+
+[[package]]
+name = "ntree"
+version = "0.3.2"
+dependencies = [
+ "chrono",
+ "keyring",
+ "nostr",
+ "nostr-sdk",
+ "rayon",
+ "regex",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-dialog",
+ "tauri-plugin-opener",
+ "trash",
+ "wait-timeout",
+ "walkdir",
 ]
 
 [[package]]

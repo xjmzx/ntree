@@ -2,11 +2,11 @@
 
 # ntree
 
-(binary `ndisc-tree`; formerly `audio-flac-quality-check-tauri` / `ndisc.blobtree`)
+(formerly `audio-flac-quality-check-tauri` / `ndisc.blobtree` / `ndisc-tree`)
 
 Tauri 2 desktop port of [`audio-flac-quality-check`](https://github.com/xjmzx/audio-flac-quality-check).
 Same heuristic, same thresholds, same workflow — different stack so it
-matches the rest of the suite ([`smpl-tool`](https://github.com/xjmzx/smpl-tool),
+matches the rest of the suite ([`nsmpl`](https://github.com/xjmzx/nsmpl),
 [`ndisc`](https://github.com/xjmzx/ndisc), [`bpm-tapper`](https://github.com/xjmzx/bpm-tapper)).
 
 **Stack:** Tauri 2 desktop binary + React 19 + TypeScript + Tailwind v3.
@@ -95,8 +95,8 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ## Quick start
 
 ```sh
-git clone https://github.com/xjmzx/ndisc.tree.git
-cd ndisc.tree
+git clone https://github.com/xjmzx/ntree.git
+cd ntree
 
 make deps      # npm install + cargo fetch
 make icons     # one-time: generate Tauri bundle icons from icon.svg
@@ -144,7 +144,8 @@ make clean    # remove dist/ and src-tauri/target/
 
 Scan reports are cached as JSON in the standard Tauri app-data dir
 (`~/.local/share/uk.fizx.audioflacqualitycheck/last_scan.json` on Linux),
-not next to the binary. The window restores the last scan on launch.
+not next to the binary. The directory keeps the app's original bundle
+identifier on purpose, so existing scans survive the renames. The window restores the last scan on launch.
 
 Other state:
 
@@ -162,7 +163,7 @@ Other state:
 ## Layout
 
 ```
-ndisc.tree/
+ntree/
 ├── src/                              # React + TS frontend
 │   ├── App.tsx                       # three-column layout + views
 │   ├── components/                   # ScannerControls, Filters, LibraryTree,
@@ -182,7 +183,7 @@ ndisc.tree/
 │   ├── Cargo.toml
 │   └── tauri.conf.json
 ├── icon.svg                          # suite-style 128px tile
-├── ndisc-tree.desktop.in
+├── ntree.desktop.in
 └── Makefile
 ```
 
@@ -207,7 +208,7 @@ today with only file-metadata tags, so the plumbing is half-done:
   to what it came from. Land this as **`clip.v1`** provenance
   (`ndisc/schema/clip.v1.json`): an `a`-ref + track locator, reconciled off
   the relays.
-- **Share ntree's own clips as an `nevent`** — `smpl-tool` already emits a
+- **Share ntree's own clips as an `nevent`** — `nsmpl` already emits a
   share link for a published sample; ntree's clips have none.
 - **Multi-relay feed** — `FeedPanel` still reads only the first relay
   (`TODO(relays)`); refactor the raw-WebSocket logic onto `SimplePool` over
@@ -230,6 +231,6 @@ visualiser like Spek.
 ## Companion projects
 
 - [`audio-flac-quality-check`](https://github.com/xjmzx/audio-flac-quality-check) — the original Python + Tk version this is a port of.
-- [`smpl-tool`](https://github.com/xjmzx/smpl-tool)
+- [`nsmpl`](https://github.com/xjmzx/nsmpl)
 - [`ndisc`](https://github.com/xjmzx/ndisc)
 - [`bpm-tapper`](https://github.com/xjmzx/bpm-tapper)

@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    ndisc_tree_lib::run()
+    ntree_lib::run()
 }

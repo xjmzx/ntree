@@ -363,7 +363,7 @@ export async function sha256Hex(bytes: Uint8Array): Promise<string> {
 
 /**
  * Sign a kind:27235 HTTP-auth event in Rust (sk stays in keychain) and
- * return the "Nostr <base64>" Authorization header. Matches smpl-tool's
+ * return the "Nostr <base64>" Authorization header. Matches nsmpl's
  * upload-side auth path; only the JSON crosses the IPC boundary.
  */
 export async function nip98AuthHeader(

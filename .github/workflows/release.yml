@@ -137,7 +137,7 @@ jobs:
       # Unsigned and un-notarised, like the rest of the suite: Gatekeeper
       # refuses the first launch until the app is opened from the context
       # menu, or cleared with
-      # `xattr -dr com.apple.quarantine /Applications/ndisc-tree.app`.
+      # `xattr -dr com.apple.quarantine /Applications/ntree.app`.
       #
       # STILL LINUX-ONLY AT RUNTIME: open_folder shells out to `xdg-open`
       # and the sudo mirror-tree path to `pkexec`. Both compile fine and

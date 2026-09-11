@@ -1,4 +1,4 @@
-// Tauri commands for ndisc.tree (binary: ndisc-tree).
+// Tauri commands for ntree.
 //
 // 1:1 port of the Python check_flac_quality.sh + flac_library_browser.py:
 //   - scan_library: walks <root>/**/*.flac, runs ffprobe + ffmpeg high-pass
@@ -72,7 +72,8 @@ const VIDEO_EXTS: &[&str] = &[
 const FFMPEG_TIMEOUT_SECS: u64 = 60;
 const FFPROBE_TIMEOUT_SECS: u64 = 15;
 const REPORT_FILENAME: &str = "last_scan.json";
-// Kept on the original name across the ndisc.tree rename ON PURPOSE: the
+// Kept on the original name across every rename (the app is now ntree) ON
+// PURPOSE, as is the bundle identifier `uk.fizx.audioflacqualitycheck`: the
 // keychain service is a stable identity — renaming it would orphan the user's
 // already-stored Nostr nsec.
 const KEYRING_SERVICE_RELEASE: &str = "audio-flac-quality-check-tauri";

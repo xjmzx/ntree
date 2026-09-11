@@ -1,7 +1,9 @@
 # ntree — notes for Claude
 
-FLAC quality scanner, sampler and library mirror (binary `ndisc-tree`; the
-GitHub repo is still named `ndisc.blobtree`). Tauri 2 · React. See
+FLAC quality scanner, sampler and library mirror. Tauri 2 · React. The bundle
+identifier (`uk.fizx.audioflacqualitycheck`) and keychain service
+(`audio-flac-quality-check-tauri`) keep the original name on purpose: they
+locate the saved scan and nsec. See
 [`ntree-introduction.md`](ntree-introduction.md).
 
 ## Read SUITE.md first

@@ -5,7 +5,8 @@
 > **[ndisc/SUITE.md](https://github.com/xjmzx/ndisc/blob/main/SUITE.md)**
 > (locally: `../ndisc/SUITE.md`). This file covers **ntree** specifically.
 >
-> *(The built binary is named `ndisc-tree`.)*
+> *(The bundle identifier and keychain service keep the original
+> `audio-flac-quality-check` name on purpose: they locate saved data.)*
 
 `ntree` inspects the library's **audio quality**, cuts short **sample clips**,
 and maintains a **mirror** of the library — a technician's-bench companion to

@@ -3,8 +3,8 @@ BINDIR  ?= $(PREFIX)/bin
 APPDIR  ?= $(PREFIX)/share/applications
 ICONDIR ?= $(PREFIX)/share/icons/hicolor/scalable/apps
 
-DESKTOP_OUT := $(APPDIR)/ndisc-tree.desktop
-TAURI_BIN   := src-tauri/target/release/ndisc-tree
+DESKTOP_OUT := $(APPDIR)/ntree.desktop
+TAURI_BIN   := src-tauri/target/release/ntree
 
 .PHONY: help deps dev build install uninstall check clean icons version install-guard
 
@@ -63,12 +63,16 @@ install-guard:
 
 install: install-guard $(TAURI_BIN)
 	install -d $(BINDIR) $(APPDIR) $(ICONDIR)
-	install -m 0755 $(TAURI_BIN) $(BINDIR)/ndisc-tree
-	install -m 0644 icon.svg     $(ICONDIR)/ndisc-tree.svg
+	install -m 0755 $(TAURI_BIN) $(BINDIR)/ntree
+	install -m 0644 icon.svg     $(ICONDIR)/ntree.svg
 	sed -e 's|@BINDIR@|$(BINDIR)|g' \
 	    -e 's|@ICONDIR@|$(ICONDIR)|g' \
-	    ndisc-tree.desktop.in > $(DESKTOP_OUT)
+	    ntree.desktop.in > $(DESKTOP_OUT)
 	chmod 0644 $(DESKTOP_OUT)
+	@# Tidy up the pre-rename ndisc-tree install if it's still on disk.
+	@rm -f $(BINDIR)/ndisc-tree \
+	       $(APPDIR)/ndisc-tree.desktop \
+	       $(ICONDIR)/ndisc-tree.svg
 	@if command -v update-desktop-database >/dev/null 2>&1; then \
 		update-desktop-database $(APPDIR) >/dev/null 2>&1 || true; \
 	fi
@@ -76,12 +80,12 @@ install: install-guard $(TAURI_BIN)
 		gtk-update-icon-cache -f -t $(PREFIX)/share/icons/hicolor >/dev/null 2>&1 || true; \
 	fi
 	@echo "installed to $(PREFIX)"
-	@echo "  binary  -> $(BINDIR)/ndisc-tree"
+	@echo "  binary  -> $(BINDIR)/ntree"
 	@echo "  desktop -> $(DESKTOP_OUT)"
 
 uninstall:
-	rm -f $(BINDIR)/ndisc-tree
-	rm -f $(ICONDIR)/ndisc-tree.svg
+	rm -f $(BINDIR)/ntree
+	rm -f $(ICONDIR)/ntree.svg
 	rm -f $(DESKTOP_OUT)
 	@if command -v update-desktop-database >/dev/null 2>&1; then \
 		update-desktop-database $(APPDIR) >/dev/null 2>&1 || true; \

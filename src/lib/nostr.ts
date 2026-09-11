@@ -1,4 +1,4 @@
-// Nostr identity helpers for ndisc.tree.
+// Nostr identity helpers for ntree.
 //
 // The nsec lives in the OS keychain (libsecret on Linux) via the Rust
 // `keyring` crate — never in localStorage. Mirrors ndisc's pattern.
