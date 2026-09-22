@@ -56,6 +56,7 @@ import {
 } from "./lib/tauri";
 import {
   clearIdentity,
+  keyringBackend,
   loadIdentity,
   shortNpub,
   type Identity,
@@ -173,6 +174,7 @@ export default function App() {
     { text: "ready", tone: "muted" },
   );
   const [identity, setIdentity] = useState<Identity | null>(null);
+  const [keyringStore, setKeyringStore] = useState<string>("…");
   const [profile, setProfile] = useState<ProfileMeta | null>(null);
   const [theme, setTheme] = useState<Theme>(loadTheme);
   const [density, setDensity] = useState<Density>(loadDensity);
@@ -490,6 +492,14 @@ export default function App() {
     loadIdentity()
       .then(setIdentity)
       .catch(() => setIdentity(null));
+  }, []);
+
+  // Which store this build actually compiled in — reported by Rust so the
+  // footer cannot name a keychain that is not there.
+  useEffect(() => {
+    keyringBackend()
+      .then(setKeyringStore)
+      .catch(() => setKeyringStore("unknown"));
   }, []);
 
   // Forget the nsec from the OS keychain — the header chip's action, replacing
@@ -1386,10 +1396,10 @@ export default function App() {
             </span>
             <span
               className="inline-flex items-center gap-1 text-ok"
-              title="signed in · nsec stored in OS keychain (libsecret on Linux)"
+              title={`signed in · nsec stored in ${keyringStore}`}
             >
               <Lock size={11} />
-              <span>nsec stored in keychain</span>
+              <span>nsec stored in {keyringStore}</span>
             </span>
           </span>
         ) : (
