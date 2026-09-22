@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, Search } from "lucide-react";
 import { cn } from "../lib/cn";
 import type { ScanReport, Verdict } from "../lib/tauri";
+import { matches, searchKey } from "../lib/search";
 
 // Flat, sortable, read-only view of the scan — the hierarchically-flat
 // counterpart to the Library tree (ndisc's BatchEditView skeleton, minus the
@@ -102,13 +103,11 @@ export function TableView({ report }: { report: ScanReport | null }) {
 
   // Substring filter over artist / release / file, applied before sort.
   const filtered = useMemo(() => {
-    const q = filter.trim().toLowerCase();
+    const q = searchKey(filter.trim());
     if (!q) return flat;
     return flat.filter(
       (r) =>
-        r.file.toLowerCase().includes(q) ||
-        r.artist.toLowerCase().includes(q) ||
-        r.release.toLowerCase().includes(q),
+        matches(r.file, q) || matches(r.artist, q) || matches(r.release, q),
     );
   }, [flat, filter]);
 

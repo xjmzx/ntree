@@ -17,6 +17,27 @@ ndisc's `published.json` manifest, and `~/.config/ndisc-suite/roots.json`).
 > The **0.2.7** entry covers a six-week, 37-commit stretch that was tagged only
 > at the end of it.
 
+## 0.3.3 — 2026-09-22
+
+### Fixed — search missed names the filesystem holds decomposed
+
+Filenames arrive in whichever Unicode normalisation the filesystem holds, and
+the search filters compared raw strings. A name stored NFD — this library has
+one, `02 Wöden's Phallus.flac`, with `o` + U+0308 — is a different string from
+the NFC form a keyboard produces, though the two render identically. Typing
+`Wöden` matched nothing; `den` matched.
+
+- The path index in `App.tsx` is now built with `searchKey` (NFC + lowercase)
+  rather than `toLowerCase`, keeping the precompute-once optimisation that
+  keeps the ~18k-row filter cheap per keystroke.
+- The table filter and the feed filter fold both sides at comparison time
+  (`src/lib/search.ts`), so it also works for values ingested earlier.
+
+**Stored paths are never normalised.** A filename on Linux is a byte string
+with no canonical equivalence at the filesystem layer; rewriting one to NFC
+yields a path that does not exist. Comparison-time only. Reasoning in ndisc's
+`schema/identity-normalisation-design-2026-09-22.md`.
+
 ## Unreleased
 
 ### Changed — named ntree everywhere it is shown

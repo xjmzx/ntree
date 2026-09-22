@@ -16,6 +16,7 @@ import { cn } from "../lib/cn";
 import { type Identity, shortNpub } from "../lib/nostr";
 import { useReactions } from "../hooks/useReactions";
 import { REACTION_DOWN, REACTION_UP, displayCount } from "../lib/rating";
+import { matches, searchKey } from "../lib/search";
 
 // TODO(relays): currently consumes only the first relay from the prop —
 // raw WebSocket logic predates the multi-relay set. Refactor to SimplePool
@@ -241,16 +242,16 @@ export function FeedPanel({ identity, relays, onCollapse }: FeedPanelProps) {
   }, [meOnly, identity?.pk, refreshKey]);
 
   const visible = useMemo(() => {
-    const q = search.trim().toLowerCase();
+    const q = searchKey(search.trim());
     if (!q) return events;
     return events.filter((e) => {
       const a = audioFrom(e);
       const npub = npubFromHex(e.pubkey).toLowerCase();
       return (
         npub.includes(q) ||
-        e.content.toLowerCase().includes(q) ||
-        (a?.url.toLowerCase().includes(q) ?? false) ||
-        (a?.title?.toLowerCase().includes(q) ?? false)
+        matches(e.content, q) ||
+        (a?.url ? matches(a.url, q) : false) ||
+        (a?.title ? matches(a.title, q) : false)
       );
     });
   }, [events, search]);

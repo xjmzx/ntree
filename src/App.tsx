@@ -68,6 +68,7 @@ import {
   sourceSignature,
   uniquePairs,
 } from "./lib/paths";
+import { searchKey } from "./lib/search";
 
 const SAMPLE_SECS = 10;
 const SAMPLE_START_OFFSET_SECS = 30;
@@ -714,11 +715,13 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  // Lowercased paths, computed once per report rather than on every search
-  // keystroke — the per-row toLowerCase() over ~18k rows was a big slice of
-  // the filter cost.
-  const lowerPaths = useMemo(
-    () => report?.rows.map((r) => r.path.toLowerCase()) ?? [],
+  // Search keys for every path, computed once per report rather than on every
+  // search keystroke — the per-row fold over ~18k rows was a big slice of the
+  // filter cost. NFC-normalised as well as lowercased, so a name the
+  // filesystem holds decomposed still matches a query typed composed. The
+  // stored path itself is never normalised; this index is comparison-only.
+  const searchPaths = useMemo(
+    () => report?.rows.map((r) => searchKey(r.path)) ?? [],
     [report],
   );
 
@@ -756,10 +759,10 @@ export default function App() {
 
   const filteredRows: ScanRow[] = useMemo(() => {
     if (!report) return [];
-    const q = filter.search.trim().toLowerCase();
+    const q = searchKey(filter.search.trim());
     return report.rows.filter((r, i) => {
       if (filter.verdict !== "All" && r.verdict !== filter.verdict) return false;
-      if (q && !lowerPaths[i].includes(q)) return false;
+      if (q && !searchPaths[i].includes(q)) return false;
       if (filter.sample !== "all") {
         const has = sampledSignatures.has(sourceSignature(r.path, libRoot));
         if (filter.sample === "sampled" && !has) return false;
@@ -770,7 +773,7 @@ export default function App() {
       }
       return true;
     });
-  }, [report, filter, sampledSignatures, libRoot, lowerPaths, inNdiscRelease]);
+  }, [report, filter, sampledSignatures, libRoot, searchPaths, inNdiscRelease]);
 
   // How many of the filtered rows have no clip yet — the work a Sample run
   // would actually do. Sampling is idempotent (existing clips are skipped), so
