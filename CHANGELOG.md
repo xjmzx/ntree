@@ -17,6 +17,27 @@ ndisc's `published.json` manifest, and `~/.config/ndisc-suite/roots.json`).
 > The **0.2.7** entry covers a six-week, 37-commit stretch that was tagged only
 > at the end of it.
 
+## 0.3.5 — 2026-09-30
+
+### Fixed
+
+- **macOS now actually stores the signing key.** The macOS build had no
+  keychain backend compiled in, so the keyring library fell back to an
+  in-memory placeholder: it accepted a key, reported success and kept nothing,
+  not even until the next command. Every platform now names its backend
+  explicitly (Keychain on macOS, Secret Service on Linux, Credential Manager
+  on Windows), the UI reports the backend the build really has instead of
+  saying "libsecret" everywhere, and saving a key reads it back to confirm.
+  Linux and Windows builds are unchanged.
+
+### Changed
+
+- **Linux releases ship a `.deb` only.** The AppImage bundled its own
+  webkit2gtk (~80 MB against the `.deb`'s ~6 MB) for distros nobody here runs,
+  and needs libfuse2 on current Ubuntu. Other distros can build from source.
+  Earlier releases keep theirs.
+- **New icon**, from the 2026-09-29 Figma export.
+
 ## 0.3.3 — 2026-09-22
 
 ### Fixed — search missed names the filesystem holds decomposed
