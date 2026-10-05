@@ -17,6 +17,22 @@ ndisc's `published.json` manifest, and `~/.config/ndisc-suite/roots.json`).
 > The **0.2.7** entry covers a six-week, 37-commit stretch that was tagged only
 > at the end of it.
 
+## 0.4.1 — 2026-10-06
+
+### Changed — clips and reactions go to our own relays only
+
+ntree was the last but one app still publishing to `nos.lol` and
+`relay.primal.net`. Neither kept this key's events, and ndisc, nplay, nview and
+ntune had already moved to the suite's own pair.
+
+- **Clips:** the locked secondary relay is now `relay.nfunc.xyz` (the hub's
+  mirror) in place of `nos.lol` + `relay.primal.net`. The first relay is still
+  the editable publish relay, `relay.fizx.uk` by default.
+- **Reactions** are sent to and read from `relay.fizx.uk` + `relay.nfunc.xyz`.
+
+Both are whitelist-only relays: a key that is not allowed on them publishes
+nowhere. Nothing already published moves or is deleted.
+
 ## 0.4.0 — 2026-10-06
 
 ### Changed — the web copy of a clip is AAC, not Opus
