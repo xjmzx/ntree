@@ -2635,7 +2635,9 @@ fn clear_identity() -> Result<(), String> {
 
 // ---- nostr reactions (kind:7 / kind:5) --------------------------------
 
-const REACTION_RELAYS: &[&str] = &["wss://relay.fizx.uk", "wss://nos.lol"];
+// The suite's own pair — the hub and its mirror. Must match the frontend's
+// REACTION_RELAYS (hooks/useReactions.ts): what is written here is read there.
+const REACTION_RELAYS: &[&str] = &["wss://relay.fizx.uk", "wss://relay.nfunc.xyz"];
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]

@@ -53,7 +53,10 @@ const WORKSPACE_DEST_KEY = "afqc-tauri.workspace.dest";
 const COMPRESS_DEST_KEY = "afqc-tauri.compress.dest";
 const PUBLISH_RELAY_KEY = "afqc-tauri.publish.relay";
 const DEFAULT_PUBLISH_RELAY = "wss://relay.fizx.uk";
-const SECONDARY_RELAYS = ["wss://nos.lol", "wss://relay.primal.net"];
+// The locked secondary: the hub's mirror, our own. It was nos.lol + primal until
+// 0.4.1 — neither kept this key's events (checked 2026-10-02), and the rest of
+// the suite had already moved to fizx + nfunc.
+const SECONDARY_RELAYS = ["wss://relay.nfunc.xyz"];
 
 export interface Library {
   /** The "DB": the current scan report (null until loaded/scanned). */
@@ -94,7 +97,11 @@ export function useLibrary(): Library {
     DEFAULT_PUBLISH_RELAY,
   );
   const relays = useMemo(
-    () => [publishRelay.trim() || DEFAULT_PUBLISH_RELAY, ...SECONDARY_RELAYS],
+    () => {
+      const primary = publishRelay.trim() || DEFAULT_PUBLISH_RELAY;
+      // A publish relay set to the mirror itself must not be listed twice.
+      return [primary, ...SECONDARY_RELAYS.filter((r) => r !== primary)];
+    },
     [publishRelay],
   );
   const libRoot = report?.root ?? root;

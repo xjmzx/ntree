@@ -1415,8 +1415,8 @@ export default function App() {
         )}
 
         {/* Relay indicator — first host is the user-editable publish
-            relay (defaults to wss://relay.fizx.uk), the other two are
-            locked secondaries. Tooltip shows the full ws:// URLs. */}
+            relay (defaults to wss://relay.fizx.uk), the rest is the
+            locked secondary (its mirror). Tooltip shows the full ws:// URLs. */}
         <span
           className="inline-flex items-center gap-1.5 font-mono min-w-0"
           title={relays.map((r) => r).join("\n")}

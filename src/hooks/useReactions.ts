@@ -18,7 +18,7 @@ import { deleteReaction, publishReaction } from "../lib/tauri";
 export type ReactionAgg = { up: number; down: number; mine: string | null };
 const EMPTY: ReactionAgg = { up: 0, down: 0, mine: null };
 
-const REACTION_RELAYS = ["wss://relay.fizx.uk", "wss://nos.lol"];
+const REACTION_RELAYS = ["wss://relay.fizx.uk", "wss://relay.nfunc.xyz"];
 
 export interface FeedEventRef {
   id: string;
