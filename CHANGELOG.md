@@ -17,7 +17,30 @@ ndisc's `published.json` manifest, and `~/.config/ndisc-suite/roots.json`).
 > The **0.2.7** entry covers a six-week, 37-commit stretch that was tagged only
 > at the end of it.
 
-## 0.4.2 — 2026-10-06
+## 0.4.3 — 2026-10-06
+
+### Fixed — "create mirror" made its own orphans
+
+The mirror step built each clip folder's name from the artist / release labels
+the library view displays, and tidied it. So it created:
+
+- a literal folder called **`(no album)`** for every artist whose tracks sit
+  directly in the artist folder, and
+- a **tidied duplicate** of any folder whose real name the tidying changed — a
+  leading space, leading dots, a trailing dot.
+
+Each was empty, matched no source folder, was correctly reported as an orphan —
+and was made again by the next mirror run, so trashing them never stuck.
+
+The mirror step now creates each folder from the source folder's real path,
+character for character. In place of the tidying there is a guard on the path's
+shape: nothing absolute and nothing containing `..`, so a folder can only be
+created inside the destination. After upgrading, trash the orphans once more;
+they will not come back.
+
+No clip was ever lost to this — the sampler has always created the correctly
+named folder for a clip itself.
+
 
 ### Fixed — short tracks get a real clip
 
