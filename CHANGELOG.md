@@ -17,7 +17,34 @@ ndisc's `published.json` manifest, and `~/.config/ndisc-suite/roots.json`).
 > The **0.2.7** entry covers a six-week, 37-commit stretch that was tagged only
 > at the end of it.
 
-## 0.4.1 — 2026-10-06
+## 0.4.2 — 2026-10-06
+
+### Fixed — short tracks get a real clip
+
+Every clip was cut starting 30 seconds in, whatever the track's length. A track
+shorter than that produced a file with no audio in it — which then counted as
+sampled for good — and a 31-second track produced a one-second clip.
+
+- **The clip window slides back to fit.** A track too short for the usual
+  position gets a full clip ending at its end; a track shorter than a clip is
+  taken whole. The timeline and the details panel draw the clip where it is.
+- **An empty clip is not a sampled track.** ntree reads the sample count in each
+  clip's FLAC header: a clip that holds no audio shows as unsampled and is cut
+  again. If a cut still produces nothing, the sampler retries from the start and
+  reports a failure rather than leave an empty file behind.
+- **The same for web copies.** An empty `.m4a` counts as not compressed, and
+  Compress refuses to encode a clip with no audio.
+
+After upgrading, run Sample and then Compress: the clips that were empty are
+offered again. A clip that is merely short (from a 30–40 second track) is a
+valid clip and is kept; delete it to have it re-cut at full length.
+
+### Added — Compress shows its progress
+
+A Compress run now draws the same progress strip as a scan or a sample: count,
+current clip, percentage, bar. Its progress was already being tracked and was
+never drawn — a run over a whole library showed a stop button and nothing else.
+
 
 ### Changed — clips and reactions go to our own relays only
 
