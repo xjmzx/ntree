@@ -17,6 +17,31 @@ ndisc's `published.json` manifest, and `~/.config/ndisc-suite/roots.json`).
 > The **0.2.7** entry covers a six-week, 37-commit stretch that was tagged only
 > at the end of it.
 
+## 0.4.0 — 2026-10-06
+
+### Changed — the web copy of a clip is AAC, not Opus
+
+The Compress step writes each clip's web-optimised copy as **AAC in an MP4
+container** (`track.10s.m4a`) instead of Opus (`track.10s.opus`). Opus is the
+better codec per bit; a discovery clip is worth as much as the number of places
+it plays, and AAC plays everywhere — every browser, and Apple's devices in
+particular. Reach over efficiency.
+
+- **128 kbps, stereo, 44.1 kHz**, AAC-LC, index at the front of the file
+  (`+faststart`) so a browser can start before the whole clip has arrived. Every
+  clip is written at 44.1 kHz — Opus resampled on its own, AAC does not, and a
+  96 or 192 kHz AAC file is what a phone declines to play.
+- ffmpeg's own `aac` encoder, so Linux, macOS and Windows produce the same thing.
+- A clip comes to about 170 KB, against about 210 KB for the Opus one.
+
+**Existing `.opus` files are not touched and no longer count.** After upgrading,
+every clip reads as "not compressed": run Compress to make the `.m4a` set, then
+delete the old `.opus` files yourself. Nothing published is affected — ntree
+publishes the FLAC clip.
+
+**Pairs with nsmpl 0.6.0**, which finds a clip's web copy by its name; upgrade
+both together.
+
 ## 0.3.5 — 2026-09-30
 
 ### Fixed
