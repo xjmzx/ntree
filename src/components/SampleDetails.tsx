@@ -4,7 +4,7 @@ import { Section } from "./Section";
 import { Waveform } from "./Waveform";
 import { cn } from "../lib/cn";
 import { type ScanRow, type Verdict } from "../lib/tauri";
-import { sampleDestPath, splitPath } from "../lib/paths";
+import { clipStartSecs, sampleDestPath, splitPath } from "../lib/paths";
 
 const SAMPLE_SECS = 10;
 const SAMPLE_START_OFFSET_SECS = 30;
@@ -48,8 +48,13 @@ export function SampleDetails({
   onCollapse,
 }: SampleDetailsProps) {
   const has = !!row;
-  const sampleStart = hasClip ? SAMPLE_START_OFFSET_SECS : undefined;
-  const sampleEnd = hasClip ? SAMPLE_START_OFFSET_SECS + SAMPLE_SECS : undefined;
+  const clipStart = clipStartSecs(
+    row?.durationSecs,
+    SAMPLE_START_OFFSET_SECS,
+    SAMPLE_SECS,
+  );
+  const sampleStart = hasClip ? clipStart : undefined;
+  const sampleEnd = hasClip ? clipStart + SAMPLE_SECS : undefined;
   const name = row ? row.path.split("/").pop() ?? row.path : "—";
 
   // from = the source track under the library root; to = the 10s clip under

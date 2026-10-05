@@ -65,6 +65,7 @@ import { usePersistedBool } from "./lib/usePersistedString";
 import { useLibrary } from "./lib/library";
 import {
   clipCompressItem,
+  clipStartSecs,
   sampleDestPath,
   sourceSignature,
   uniquePairs,
@@ -585,6 +586,11 @@ export default function App() {
     const items = tracks.map((t) => ({
       src: t.path,
       dest: sampleDestPath(t.path, libRoot, dest, SAMPLE_SECS),
+      startOffsetSecs: clipStartSecs(
+        t.durationSecs,
+        SAMPLE_START_OFFSET_SECS,
+        SAMPLE_SECS,
+      ),
     }));
 
     samplingActive.current = true;
@@ -1233,6 +1239,8 @@ export default function App() {
           mirror={mirrorState}
           sampling={sampling}
           samplingCancelling={sampleCancelledRef.current}
+          compressing={compressing}
+          compressingCancelling={compressCancelledRef.current}
         />
 
         {/* Main row — [ Sample ][ Library ][ Radio ]. The Library is the

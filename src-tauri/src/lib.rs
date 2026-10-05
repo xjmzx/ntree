@@ -221,6 +221,11 @@ impl CompressCancel {
 struct SampleItem {
     src: String,
     dest: String,
+    /// Where in the source this clip starts, when it differs from the batch's
+    /// offset — a track too short for the usual position is clipped earlier.
+    /// Absent for Compress items, which are already cut.
+    #[serde(default)]
+    start_offset_secs: Option<u32>,
 }
 
 #[derive(Serialize, Clone, Copy, Debug, PartialEq, Eq)]
@@ -1535,6 +1540,48 @@ fn scan_inner(
 
 // ---- sampler -----------------------------------------------------------
 
+/// Total samples per a FLAC file's STREAMINFO block — the first metadata block,
+/// directly after the `fLaC` marker. None when the bytes are not that.
+///
+/// ffmpeg writes the real count into the header once it has finished (the
+/// output is a seekable file), so this is the encoder's own statement of how
+/// much audio the clip holds — read from 26 bytes, with no decoder involved.
+fn flac_header_total_samples(head: &[u8]) -> Option<u64> {
+    // marker(4) + block header(4) + STREAMINFO(34); the count is its last 36
+    // bits before the MD5: the low nibble of byte 13, then bytes 14..18.
+    if head.len() < 26 || &head[..4] != b"fLaC" || head[4] & 0x7f != 0 {
+        return None;
+    }
+    let info = &head[8..];
+    let high = u64::from(info[13] & 0x0f) << 32;
+    let low = u64::from(u32::from_be_bytes([info[14], info[15], info[16], info[17]]));
+    Some(high | low)
+}
+
+/// A clip file with no audio in it. Size does not tell: an empty clip cut
+/// before `-vn` existed can carry 200 KB of cover art and nothing else. Only a
+/// readable header that says zero counts — anything unreadable is left to be
+/// judged a real clip, so this can never cause a good file to be overwritten.
+fn clip_is_empty(path: &Path) -> bool {
+    use std::io::Read;
+    let mut head = [0u8; 26];
+    match fs::File::open(path).and_then(|mut f| f.read_exact(&mut head)) {
+        Ok(()) => flac_header_total_samples(&head) == Some(0),
+        Err(_) => false,
+    }
+}
+
+/// A web copy with no audio in it. An MP4 holding an AAC track of any length is
+/// well over a kilobyte; one with no track at all is its bare boxes, about half
+/// of one.
+const EMPTY_WEB_COPY_MAX_BYTES: u64 = 1024;
+
+fn web_copy_is_empty(path: &Path) -> bool {
+    fs::metadata(path)
+        .map(|m| m.len() < EMPTY_WEB_COPY_MAX_BYTES)
+        .unwrap_or(false)
+}
+
 /// Extracts a fixed-length clip from one source file into dest. ffmpeg
 /// `-ss <offset> -t <dur>` placed BEFORE `-i` for input-side seek (fast
 /// even on huge files; doesn't decode-and-discard). `-c:a flac` re-encodes
@@ -1551,7 +1598,9 @@ fn sample_one(
     let src = Path::new(&item.src);
     let dest = Path::new(&item.dest);
 
-    if dest.exists() {
+    // An existing clip is left alone — unless it holds no audio, which is not a
+    // clip but the residue of one (see `clip_is_empty`) and is cut again.
+    if dest.exists() && !clip_is_empty(dest) {
         return (SampleOutcome::Skipped, None);
     }
     if let Some(parent) = dest.parent() {
@@ -1563,6 +1612,38 @@ fn sample_one(
         }
     }
 
+    let offset = item.start_offset_secs.unwrap_or(start_offset_secs);
+    let (outcome, why) = cut_clip(src, dest, duration_secs, offset);
+    if outcome != SampleOutcome::Created || !clip_is_empty(dest) {
+        return (outcome, why);
+    }
+
+    // ffmpeg succeeded and wrote nothing: the offset lies past the end of the
+    // track. Seeking beyond the end is not an error to ffmpeg — it encodes zero
+    // frames, exits 0, and leaves a well-formed FLAC with no audio in it, which
+    // then counts as "sampled" forever. The caller normally sends an offset
+    // that fits; this is the net under it, for a duration the scan got wrong
+    // or never had. Take the clip from the start instead.
+    if offset > 0 {
+        let (outcome, why) = cut_clip(src, dest, duration_secs, 0);
+        if outcome != SampleOutcome::Created || !clip_is_empty(dest) {
+            return (outcome, why);
+        }
+    }
+    let _ = fs::remove_file(dest);
+    (
+        SampleOutcome::Failed,
+        Some("no audio to sample — the track decoded to nothing".to_string()),
+    )
+}
+
+/// One ffmpeg cut: `duration_secs` of `src` from `start_offset_secs`, as FLAC.
+fn cut_clip(
+    src: &Path,
+    dest: &Path,
+    duration_secs: u32,
+    start_offset_secs: u32,
+) -> (SampleOutcome, Option<String>) {
     let mut cmd = tool_cmd("ffmpeg");
     cmd.args([
         "-nostdin",
@@ -1648,8 +1729,17 @@ fn compress_one(item: &SampleItem) -> (SampleOutcome, Option<String>) {
     let src = Path::new(&item.src);
     let dest = Path::new(&item.dest);
 
-    if dest.exists() {
+    // As with clips: an existing web copy is kept unless it is an empty one.
+    if dest.exists() && !web_copy_is_empty(dest) {
         return (SampleOutcome::Skipped, None);
+    }
+    // Nothing to encode. Say so rather than write an empty web copy of it.
+    if clip_is_empty(src) {
+        let _ = fs::remove_file(dest);
+        return (
+            SampleOutcome::Failed,
+            Some("the clip has no audio — sample the track again first".to_string()),
+        );
     }
     if let Some(parent) = dest.parent() {
         if let Err(e) = fs::create_dir_all(parent) {
@@ -1803,6 +1893,11 @@ async fn scan_sample_dest(
             if !name.ends_with(&suffix) {
                 continue;
             }
+            // A clip with no audio is not a sampled track — leave it out, so the
+            // track reads as unsampled and the sampler cuts it again.
+            if clip_is_empty(path) {
+                continue;
+            }
             let rel = match path.strip_prefix(&root) {
                 Ok(r) => r,
                 Err(_) => continue,
@@ -1851,6 +1946,10 @@ async fn scan_compress_dest(
                 None => continue,
             };
             if !name.ends_with(&suffix) {
+                continue;
+            }
+            // Likewise an empty web copy: not compressed, to be made again.
+            if web_copy_is_empty(path) {
                 continue;
             }
             let rel = match path.strip_prefix(&root) {
@@ -2901,6 +3000,66 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod empty_clip_tests {
+    use super::*;
+
+    /// A minimal FLAC head: marker, a STREAMINFO block header, and 34 bytes of
+    /// STREAMINFO with `total` in its 36-bit sample-count field.
+    fn head(total: u64) -> Vec<u8> {
+        let mut b = b"fLaC".to_vec();
+        b.extend_from_slice(&[0x00, 0x00, 0x00, 0x22]);
+        let mut info = [0u8; 34];
+        info[13] = 0xA0 | ((total >> 32) as u8 & 0x0f); // high nibble: other fields
+        info[14..18].copy_from_slice(&(total as u32).to_be_bytes());
+        b.extend_from_slice(&info);
+        b
+    }
+
+    #[test]
+    fn sample_count_is_read_from_streaminfo() {
+        assert_eq!(flac_header_total_samples(&head(0)), Some(0));
+        assert_eq!(flac_header_total_samples(&head(441_000)), Some(441_000));
+        // 36 bits: a count above 2^32 keeps its top nibble.
+        assert_eq!(
+            flac_header_total_samples(&head(0x3_0000_0001)),
+            Some(0x3_0000_0001)
+        );
+    }
+
+    #[test]
+    fn anything_else_is_not_judged() {
+        assert_eq!(flac_header_total_samples(b"ID3\x04 not a flac head......."), None);
+        assert_eq!(flac_header_total_samples(&head(0)[..20]), None);
+        // First block is not STREAMINFO.
+        let mut odd = head(0);
+        odd[4] = 0x04;
+        assert_eq!(flac_header_total_samples(&odd), None);
+    }
+
+    #[test]
+    fn only_a_readable_zero_makes_a_clip_empty() {
+        let dir = std::env::temp_dir().join("ntree-empty-clip-test");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let write = |name: &str, bytes: &[u8]| {
+            let p = dir.join(name);
+            fs::write(&p, bytes).unwrap();
+            p
+        };
+        assert!(clip_is_empty(&write("empty.flac", &head(0))));
+        assert!(!clip_is_empty(&write("real.flac", &head(441_000))));
+        // Unreadable or missing is never "empty" — it must not be overwritten.
+        assert!(!clip_is_empty(&write("junk.flac", b"not audio")));
+        assert!(!clip_is_empty(&dir.join("absent.flac")));
+
+        assert!(web_copy_is_empty(&write("empty.m4a", &[0u8; 491])));
+        assert!(!web_copy_is_empty(&write("real.m4a", &[0u8; 2820])));
+        assert!(!web_copy_is_empty(&dir.join("absent.m4a")));
+        let _ = fs::remove_dir_all(&dir);
+    }
 }
 
 #[cfg(test)]

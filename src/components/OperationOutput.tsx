@@ -24,6 +24,10 @@ interface Props {
   mirror: MirrorState;
   sampling: SampleProgress | null;
   samplingCancelling: boolean;
+  /** Live progress of a Compress run; null when idle. Same shape as sampling —
+   *  the two batches share their progress events. */
+  compressing: SampleProgress | null;
+  compressingCancelling: boolean;
 }
 
 function ProgressStrip({
@@ -62,9 +66,12 @@ export function OperationOutput({
   mirror,
   sampling,
   samplingCancelling,
+  compressing,
+  compressingCancelling,
 }: Props) {
-  // Priority order: live scan > live sample > mirror running > last mirror
-  // result / error. The first three are mutually exclusive in practice.
+  // Priority order: live scan > live sample > live compress > mirror running >
+  // last mirror result / error. The live ones are mutually exclusive in
+  // practice.
   if (scan.active) {
     const total = Math.max(1, scan.progress?.total ?? 1);
     const done = scan.progress?.done ?? 0;
@@ -87,6 +94,21 @@ export function OperationOutput({
     return (
       <div className="rounded-lg bg-panel/40 border border-surface/40 px-4 py-2">
         <ProgressStrip label="sampling" pct={pct} line={line} />
+      </div>
+    );
+  }
+  // Compress is the longest batch of the three over a whole library and was the
+  // only one with no strip: its progress was tracked and never drawn, so a run
+  // of twenty thousand clips showed a stop button and nothing else.
+  if (compressing) {
+    const total = Math.max(1, compressing.total);
+    const pct = Math.round((100 * compressing.done) / total);
+    const line = compressing.total > 0
+      ? `${compressing.done.toLocaleString()} / ${compressing.total.toLocaleString()} · ${compressing.path || "preparing…"}${compressingCancelling ? "  · cancelling" : ""}`
+      : "preparing…";
+    return (
+      <div className="rounded-lg bg-panel/40 border border-surface/40 px-4 py-2">
+        <ProgressStrip label="compressing" pct={pct} line={line} />
       </div>
     );
   }

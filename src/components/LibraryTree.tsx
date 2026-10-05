@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { LeafDots } from "./LeafIcon";
 import { cn } from "../lib/cn";
-import { splitPath, collapseDiscAlbum } from "../lib/paths";
+import { splitPath, collapseDiscAlbum, clipStartSecs } from "../lib/paths";
 import { openFolder, type HiRes, type ScanRow, type Verdict } from "../lib/tauri";
 
 // Hi-res badge — sits beside the sample rate because it qualifies exactly that
@@ -136,12 +136,12 @@ function TrackTimeline({
   // ≥6% floor so a 10s slice of a multi-minute track never shrinks to a sliver.
   const MIN_REGION = 0.06;
   const clipLen = Math.min(SAMPLE_SECS, duration);
-  const startFrac =
-    duration > SAMPLE_START_OFFSET_SECS ? SAMPLE_START_OFFSET_SECS / duration : 0;
+  const startSecs = clipStartSecs(duration, SAMPLE_START_OFFSET_SECS, SAMPLE_SECS);
+  const startFrac = startSecs / duration;
   const width = Math.max(clipLen / duration, MIN_REGION);
   const left = Math.min(startFrac, 1 - width); // keep the floored region on-bar
   const title = sampled
-    ? `${SAMPLE_SECS}s clip at ${fmtDur(SAMPLE_START_OFFSET_SECS)} of ${fmtDur(duration)} — click to play / seek the source`
+    ? `${fmtDur(clipLen)} clip at ${fmtDur(startSecs)} of ${fmtDur(duration)} — click to play / seek the source`
     : `Not sampled · ${fmtDur(duration)} — click to play the source track`;
 
   return (

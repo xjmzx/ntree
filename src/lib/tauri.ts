@@ -230,6 +230,9 @@ export async function onScanProgress(
 export interface SampleItem {
   src: string;
   dest: string;
+  /** Where this clip starts in its source, when the track is too short for the
+   *  batch's usual offset (see clipStartSecs). Unset for Compress items. */
+  startOffsetSecs?: number;
 }
 
 export type SampleOutcome =

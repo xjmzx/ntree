@@ -81,6 +81,29 @@ export function sourceSignature(srcPath: string, srcRoot: string): string {
 }
 
 /**
+ * Where in a track its clip starts, in whole seconds.
+ *
+ * The usual place is `offsetSecs` in — past the intro. A track too short for
+ * that still gets a clip: the window slides back until it fits, ending at the
+ * track's end, and a track shorter than a clip is taken whole from 0. Cutting
+ * at the fixed offset regardless is what used to produce a one-second clip of a
+ * 31-second track and an empty file for a 29-second one.
+ *
+ * Unknown duration (a report from before durations were scanned, or a file
+ * that would not probe) keeps the usual offset; the backend falls back to 0 on
+ * its own if that turns out to be past the end.
+ */
+export function clipStartSecs(
+  durationSecs: number | null | undefined,
+  offsetSecs: number,
+  clipSecs: number,
+): number {
+  if (!durationSecs || durationSecs <= 0) return offsetSecs;
+  if (durationSecs >= offsetSecs + clipSecs) return offsetSecs;
+  return Math.max(0, Math.floor(durationSecs - clipSecs));
+}
+
+/**
  * The web-optimised copy of a clip: AAC in an MP4 container. Chosen over Opus
  * for reach — it plays in every browser and on Apple devices without a second
  * thought, which is what a discovery clip is for. Must match the backend's
