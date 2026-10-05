@@ -81,6 +81,15 @@ export function sourceSignature(srcPath: string, srcRoot: string): string {
 }
 
 /**
+ * The web-optimised copy of a clip: AAC in an MP4 container. Chosen over Opus
+ * for reach — it plays in every browser and on Apple devices without a second
+ * thought, which is what a discovery clip is for. Must match the backend's
+ * WEB_CLIP_EXT; the extension is how both sides find "already compressed".
+ */
+export const WEB_CLIP_EXT = "m4a";
+export const WEB_CLIP_MIME = "audio/mp4";
+
+/**
  * Compute the sample output path for one source track.
  * `<srcRoot>/Artist/Album/track.flac` → `<destRoot>/Artist/Album/track.10s.flac`.
  * Falls back to a flat basename under destRoot for paths outside srcRoot
@@ -114,20 +123,20 @@ export function sampleDestPath(
 /**
  * From a clip signature (relpath with the `.<dur>s.flac` suffix stripped, as
  * `scanSampleDest` returns) build a Compress item: the FLAC clip under
- * `flacRoot` and its web-optimised Opus counterpart under `opusRoot`, mirroring
+ * `flacRoot` and its web-optimised AAC counterpart under `webRoot`, mirroring
  * the tree. `<flacRoot>/Artist/Album/track.10s.flac`
- * → `<opusRoot>/Artist/Album/track.10s.opus`.
+ * → `<webRoot>/Artist/Album/track.10s.m4a`.
  */
 export function clipCompressItem(
   sig: string,
   flacRoot: string,
-  opusRoot: string,
+  webRoot: string,
   durationSecs: number,
 ): { src: string; dest: string } {
   const fr = flacRoot.replace(/\/+$/, "");
-  const or = opusRoot.replace(/\/+$/, "");
+  const or = webRoot.replace(/\/+$/, "");
   return {
     src: `${fr}/${sig}.${durationSecs}s.flac`,
-    dest: `${or}/${sig}.${durationSecs}s.opus`,
+    dest: `${or}/${sig}.${durationSecs}s.${WEB_CLIP_EXT}`,
   };
 }

@@ -65,7 +65,7 @@ export interface Library {
   /** Shared mirror/sample destination (persisted). */
   workspaceDest: string;
   setWorkspaceDest: (v: string) => void;
-  /** Web-optimised (Opus) compress destination (persisted). */
+  /** Web-optimised (AAC) compress destination (persisted). */
   compressDest: string;
   setCompressDest: (v: string) => void;
   /** Editable first relay (persisted); joined with the locked secondaries. */

@@ -68,6 +68,8 @@ import {
   sampleDestPath,
   sourceSignature,
   uniquePairs,
+  WEB_CLIP_EXT,
+  WEB_CLIP_MIME,
 } from "./lib/paths";
 import { searchKey } from "./lib/search";
 
@@ -204,13 +206,13 @@ export default function App() {
   const samplingActive = useRef(false);
   const sampleCancelledRef = useRef(false);
   const sampleUnlisten = useRef<(() => void) | null>(null);
-  // Compress dispatch — the sibling of the sampler, for the FLAC-clip -> Opus
+  // Compress dispatch — the sibling of the sampler, for the FLAC-clip -> AAC
   // step. Independent in-flight state so it can run without touching sampling.
   const [compressing, setCompressing] = useState<SampleProgress | null>(null);
   const compressingActive = useRef(false);
   const compressCancelledRef = useRef(false);
   const compressUnlisten = useRef<(() => void) | null>(null);
-  // Clip signatures that already have a web-encoded (.opus) copy under the
+  // Clip signatures that already have a web-encoded (.m4a) copy under the
   // compress dest. Refreshed on dest change and after each compress batch.
   const [compressedSignatures, setCompressedSignatures] = useState<Set<string>>(
     () => new Set(),
@@ -316,9 +318,9 @@ export default function App() {
   const [srcPlay, setSrcPlay] = useState<{ sig: string; frac: number } | null>(
     null,
   );
-  // Which sample format is playing — the FLAC clip, or its Opus web copy — so
+  // Which sample format is playing — the FLAC clip, or its AAC web copy — so
   // the row lights the right control.
-  const [playingIsOpus, setPlayingIsOpus] = useState(false);
+  const [playingIsWeb, setPlayingIsWeb] = useState(false);
 
   function clearAudio() {
     if (audioRef.current) {
@@ -337,19 +339,19 @@ export default function App() {
     }
   }
 
-  // Play a row's 10s sample — the FLAC clip (default) or its Opus web copy
-  // (`opus`). Toggling the same row+format stops; a different format switches.
-  async function playSample(row: ScanRow, opus = false) {
+  // Play a row's 10s sample — the FLAC clip (default) or its AAC web copy
+  // (`web`). Toggling the same row+format stops; a different format switches.
+  async function playSample(row: ScanRow, web = false) {
     const sig = sourceSignature(row.path, libRoot);
-    if (playingSig === sig && playingIsOpus === opus) {
+    if (playingSig === sig && playingIsWeb === web) {
       clearAudio();
       setPlayingSig(null);
       return;
     }
     clearAudio();
     setSrcPlay(null); // starting a clip stops any full-track playback
-    const destPath = opus
-      ? `${compressDest.replace(/\/+$/, "")}/${sig}.${SAMPLE_SECS}s.opus`
+    const destPath = web
+      ? `${compressDest.replace(/\/+$/, "")}/${sig}.${SAMPLE_SECS}s.${WEB_CLIP_EXT}`
       : sampleDestPath(row.path, libRoot, workspaceDest, SAMPLE_SECS);
     try {
       const bytes = await readAudioBytes(destPath);
@@ -357,7 +359,7 @@ export default function App() {
       // (could be SharedArrayBuffer in theory); Blob's signature wants
       // ArrayBuffer specifically. We know it's plain ArrayBuffer here.
       const blob = new Blob([bytes.buffer as ArrayBuffer], {
-        type: opus ? "audio/ogg" : "audio/flac",
+        type: web ? WEB_CLIP_MIME : "audio/flac",
       });
       const url = URL.createObjectURL(blob);
       audioUrlRef.current = url;
@@ -374,7 +376,7 @@ export default function App() {
       };
       audioRef.current = audio;
       setPlayingSig(sig);
-      setPlayingIsOpus(opus);
+      setPlayingIsWeb(web);
       await audio.play();
     } catch (e) {
       setPlayingSig((p) => (p === sig ? null : p));
@@ -639,7 +641,7 @@ export default function App() {
   }
 
   // Compress step — re-encode every FLAC clip under the workspace dest to a
-  // web-optimised Opus copy under the compress dest. Idempotent (existing .opus
+  // web-optimised AAC copy under the compress dest. Idempotent (existing .m4a
   // skipped); mirrors runSample's progress/summary shape.
   async function runCompress() {
     if (compressingActive.current) {
@@ -647,17 +649,17 @@ export default function App() {
       return;
     }
     const flacRoot = workspaceDest.trim();
-    const opusRoot = compressDest.trim();
+    const webRoot = compressDest.trim();
     if (!flacRoot) {
       setStatus({ text: "set a workspace (clip) destination first", tone: "warn" });
       return;
     }
-    if (!opusRoot) {
+    if (!webRoot) {
       setStatus({ text: "set a compress destination first", tone: "warn" });
       return;
     }
     const items = Array.from(sampledSignatures).map((sig) =>
-      clipCompressItem(sig, flacRoot, opusRoot, SAMPLE_SECS),
+      clipCompressItem(sig, flacRoot, webRoot, SAMPLE_SECS),
     );
     if (items.length === 0) {
       setStatus({ text: "no clips to compress — sample some first", tone: "warn" });
@@ -669,7 +671,7 @@ export default function App() {
     setCompressErrors([]);
     setCompressing({ done: 0, total: items.length, path: "", outcome: "Created" });
     setStatus({
-      text: `compressing ${items.length.toLocaleString()} clips to Opus → ${opusRoot}`,
+      text: `compressing ${items.length.toLocaleString()} clips to AAC → ${webRoot}`,
       tone: "warn",
     });
 
@@ -800,7 +802,7 @@ export default function App() {
   );
 
   // Compress operates on the FLAC clips on disk, not the library rows: total =
-  // every sampled clip, pending = those without a .opus web copy yet.
+  // every sampled clip, pending = those without a .m4a web copy yet.
   const pendingCompress = useMemo(() => {
     let n = 0;
     for (const sig of sampledSignatures) {
@@ -1336,9 +1338,9 @@ export default function App() {
                 publishedSignatures.has(sourceSignature(row.path, libRoot))
               }
               playingSig={playingSig}
-              playingIsOpus={playingIsOpus}
+              playingIsWeb={playingIsWeb}
               onPlaySample={playSample}
-              hasOpus={(row) =>
+              hasWeb={(row) =>
                 compressedSignatures.has(sourceSignature(row.path, libRoot))
               }
               srcPlayingSig={srcPlay?.sig ?? null}

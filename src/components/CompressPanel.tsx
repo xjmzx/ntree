@@ -11,16 +11,16 @@ const EXPANDED_KEY = "afqc-tauri.compress.expanded";
 interface CompressPanelProps {
   /** Total FLAC clips available to compress (the sampled-clip count). */
   total: number;
-  /** How many of those have no Opus copy yet — the real work this run does.
+  /** How many of those have no AAC copy yet — the real work this run does.
    *  Compression is idempotent (existing web clips are skipped), so `total`
    *  alone overstates the work. */
   pending: number;
-  /** Web-optimised (Opus) destination — persisted in lib/library. */
+  /** Web-optimised (AAC) destination — persisted in lib/library. */
   dest: string;
   setDest: (v: string) => void;
   /** Live progress when a compress run is in flight; null when idle. */
   compressing: SampleProgress | null;
-  /** Encode the pending FLAC clips to Opus. */
+  /** Encode the pending FLAC clips to AAC. */
   onCompress: () => void;
   /** Stop the running batch (in-flight ffmpegs finish). */
   onCancel: () => void;
@@ -70,7 +70,7 @@ export function CompressPanel({
           rows align; the column label says what this is. */}
       {!bare && (
         <p className="text-xs text-muted">
-          Web-optimised Opus copies of the clips.
+          Web-optimised AAC copies of the clips.
         </p>
       )}
       {open && (
@@ -129,7 +129,7 @@ export function CompressPanel({
                   ? "Choose a compress destination directory"
                   : pending === 0
                     ? `Every one of the ${total.toLocaleString()} clips already has a web copy — nothing to do.`
-                    : `Encode ${pending.toLocaleString()} of ${total.toLocaleString()} clips to Opus → ${dest}` +
+                    : `Encode ${pending.toLocaleString()} of ${total.toLocaleString()} clips to AAC → ${dest}` +
                       (done > 0
                         ? `\n\n${done.toLocaleString()} already have a web copy and will be skipped.`
                         : "")

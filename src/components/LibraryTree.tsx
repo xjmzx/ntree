@@ -98,7 +98,7 @@ function ClipBar({ duration, sampled }: { duration: number | null; sampled: bool
       : `${SAMPLE_SECS}s clip of ${fmtDur(duration)}`;
   return (
     <span className="flex items-center" title={title}>
-      <span className="relative flex-1 h-1.5 rounded-full bg-opus/15 overflow-hidden">
+      <span className="relative flex-1 h-1.5 rounded-full bg-web/15 overflow-hidden">
         <span
           className="absolute inset-y-0 left-0 rounded-full bg-medium"
           style={{ width: sampled ? barWidth(frac) : 0 }}
@@ -152,7 +152,7 @@ function TrackTimeline({
           const r = e.currentTarget.getBoundingClientRect();
           onSeek((e.clientX - r.left) / Math.max(1, r.width));
         }}
-        className="relative flex-1 h-2 rounded-full bg-opus/15 overflow-hidden cursor-pointer"
+        className="relative flex-1 h-2 rounded-full bg-web/15 overflow-hidden cursor-pointer"
       >
         {sampled && (
           <span
@@ -204,8 +204,8 @@ function CoverageBar({
       title={`Clip coverage · ${fmtDurLong(cov.sampledSecs)} sampled of ${fmtDurLong(cov.totalSecs)}`}
     >
       {/* Header-row aggregate bar: a quiet neutral track that JOINS the row bg
-          (not a blue chip). The opus-blue remainder stays on the per-track
-          bars (ClipBar / TrackTimeline), where it means "Opus web copy". */}
+          (not a blue chip). The web-blue remainder stays on the per-track
+          bars (ClipBar / TrackTimeline), where it means "AAC web copy". */}
       <span className="relative flex-1 h-1 rounded-full bg-fg/5 overflow-hidden">
         <span
           className="absolute inset-y-0 left-0 rounded-full bg-medium/80"
@@ -379,12 +379,12 @@ interface LibraryTreeProps {
    * per-track rows; matches the keys `hasSample` uses.
    */
   playingSig: string | null;
-  /** True when the playing sample is the Opus web copy (vs the FLAC clip). */
-  playingIsOpus: boolean;
-  /** Toggle play/stop for a row's sample — FLAC clip, or its Opus copy. */
-  onPlaySample: (row: ScanRow, opus?: boolean) => void;
-  /** Whether a row has an Opus web copy on disk (compress dest). */
-  hasOpus: (row: ScanRow) => boolean;
+  /** True when the playing sample is the AAC web copy (vs the FLAC clip). */
+  playingIsWeb: boolean;
+  /** Toggle play/stop for a row's sample — FLAC clip, or its AAC copy. */
+  onPlaySample: (row: ScanRow, web?: boolean) => void;
+  /** Whether a row has an AAC web copy on disk (compress dest). */
+  hasWeb: (row: ScanRow) => boolean;
   /** Source-signature of the row whose FULL track is playing (timeline bar). */
   srcPlayingSig: string | null;
   /** Playhead position (0..1) of the currently-playing source track. */
@@ -409,9 +409,9 @@ export function LibraryTree({
   hasSample,
   isPublished,
   playingSig,
-  playingIsOpus,
+  playingIsWeb,
   onPlaySample,
-  hasOpus,
+  hasWeb,
   srcPlayingSig,
   srcPlayFrac,
   onSeekSource,
@@ -653,7 +653,7 @@ export function LibraryTree({
                           bar · dots) is ONE continuous filled block; the only
                           break is the gap before the [o] sample indicator. */}
                       {/* Density scales the height of the colour blocks
-                          themselves (the opus title block + the items-stretch
+                          themselves (the web title block + the items-stretch
                           sample button), not the outer wrapper — so the filled
                           background extends vertically instead of opening a gap
                           around a fixed-height block. */}
@@ -664,7 +664,7 @@ export function LibraryTree({
                             "flex-1 min-w-0 flex items-center gap-1.5 pl-8 pr-2",
                             D.album,
                             "text-left text-fg italic text-sm",
-                            "bg-opus/15 group-hover/album:bg-opus/25 transition-colors",
+                            "bg-web/15 group-hover/album:bg-web/25 transition-colors",
                           )}
                         >
                           {alOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
@@ -700,7 +700,7 @@ export function LibraryTree({
                           }
                           title={alDotTitle}
                           className="shrink-0 inline-flex items-center justify-center
-                                     px-1.5 rounded-tr-xl bg-opus/15 group-hover/album:bg-opus/25
+                                     px-1.5 rounded-tr-xl bg-web/15 group-hover/album:bg-web/25
                                      transition-colors"
                           aria-label={`Sample release ${album.name}`}
                         >
@@ -713,11 +713,11 @@ export function LibraryTree({
                         album.tracks.map((t, i) => {
                           const sampled = hasSample(t);
                           const sig = signatureOf(t);
-                          const onOpus = hasOpus(t);
+                          const onWeb = hasWeb(t);
                           const isClipPlaying =
-                            sampled && playingSig === sig && !playingIsOpus;
-                          const isOpusPlaying =
-                            onOpus && playingSig === sig && playingIsOpus;
+                            sampled && playingSig === sig && !playingIsWeb;
+                          const isWebPlaying =
+                            onWeb && playingSig === sig && playingIsWeb;
                           const selected = selectedSig === sig;
                           return (
                             <div
@@ -785,10 +785,10 @@ export function LibraryTree({
                                   </span>
                                 )}
                               </span>
-                              {/* Opus web-copy audition — the third type-view
-                                  (source = the bar, clip = the ▶, opus = here).
+                              {/* AAC web-copy audition — the third type-view
+                                  (source = the bar, clip = the ▶, web copy = here).
                                   Shown only when the compressed copy exists. */}
-                              {onOpus ? (
+                              {onWeb ? (
                                 <button
                                   type="button"
                                   onClick={(e) => {
@@ -796,25 +796,25 @@ export function LibraryTree({
                                     onPlaySample(t, true);
                                   }}
                                   title={
-                                    isOpusPlaying
-                                      ? "Stop Opus web copy"
-                                      : "Play the Opus web copy"
+                                    isWebPlaying
+                                      ? "Stop AAC web copy"
+                                      : "Play the AAC web copy"
                                   }
                                   aria-label={
-                                    isOpusPlaying
-                                      ? `Stop Opus of ${t._track}`
-                                      : `Play Opus copy of ${t._track}`
+                                    isWebPlaying
+                                      ? `Stop AAC of ${t._track}`
+                                      : `Play AAC copy of ${t._track}`
                                   }
                                   className={cn(
                                     "inline-flex items-center gap-1 px-1.5 py-0.5 rounded",
                                     "text-[10px] leading-none transition-colors",
-                                    isOpusPlaying
-                                      ? "bg-opus text-bg"
-                                      : "bg-opus/15 text-opus hover:bg-opus/25",
+                                    isWebPlaying
+                                      ? "bg-web text-bg"
+                                      : "bg-web/15 text-web hover:bg-web/25",
                                   )}
                                 >
                                   <Globe size={10} className="shrink-0" />
-                                  opus
+                                  aac
                                 </button>
                               ) : (
                                 <span aria-hidden className="block" />
@@ -867,7 +867,7 @@ export function LibraryTree({
                             <span className="text-mauve/60">video</span>
                             <span className="text-right text-muted" />
                             <span className="text-right text-muted" />
-                            {/* no Opus for video — empty cell keeps the columns
+                            {/* no web copy for video — empty cell keeps the columns
                                 aligned with the audio track rows. */}
                             <span aria-hidden className="block w-4 h-4" />
                             <ClipBar duration={v.durationSecs} sampled={hasSample(v)} />

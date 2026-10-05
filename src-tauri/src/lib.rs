@@ -1616,16 +1616,34 @@ fn sample_one(
     }
 }
 
-/// Opus VBR bitrate for the web-optimised clips. 96 kbps stereo is transparent
-/// enough for 10-second discovery clips at a small fraction of the FLAC size.
-const OPUS_BITRATE_KBPS: u32 = 96;
+/// The web-optimised copy of a clip is AAC in an MP4 container (`.m4a`).
+///
+/// It was Opus until 0.4.0. Opus is the better codec per bit, but a discovery
+/// clip is worth exactly as much as the number of places it plays, and AAC plays
+/// everywhere — every browser, and Apple's devices in particular, where Opus
+/// support has been the weak spot. Reach over efficiency.
+///
+/// Must match the frontend's WEB_CLIP_EXT (lib/paths.ts): the extension is how
+/// both sides recognise a clip that is already compressed.
+const WEB_CLIP_EXT: &str = "m4a";
 
-/// Transcode one already-cut FLAC clip to a web-optimised Opus file. The clip is
+/// AAC bitrate for the web clips. 128 kbps stereo AAC-LC sits where 96 kbps Opus
+/// did for transparency on a 10-second clip, at a small fraction of the FLAC.
+const WEB_AAC_BITRATE_KBPS: u32 = 128;
+
+/// Every web clip is written at 44.1 kHz. Opus resampled to 48 kHz on its own;
+/// AAC keeps whatever rate it is given, and a 96 or 192 kHz AAC file is exactly
+/// the kind of thing a phone declines to play. One rate, the universal one.
+const WEB_SAMPLE_RATE_HZ: u32 = 44_100;
+
+/// Transcode one already-cut FLAC clip to a web-optimised AAC file. The clip is
 /// already trimmed and audio-only, so this is a straight re-encode — no `-ss`/`-t`.
-/// `-c:a libopus` at [`OPUS_BITRATE_KBPS`], VBR; Opus resamples to 48 kHz
-/// internally, so a hi-res FLAC clip is downsized to a web-appropriate rate for
-/// free. Idempotent: an existing dest is skipped, partial output from a failed
-/// run is removed. Mirrors `sample_one`'s outcome + error reporting exactly.
+/// `-c:a aac` is ffmpeg's own encoder, present in every build on every platform,
+/// so Linux, macOS and Windows produce the same thing (Apple's `aac_at` is
+/// better and macOS-only). `+faststart` puts the index at the front so a browser
+/// can begin playing before the whole file has arrived. Idempotent: an existing
+/// dest is skipped, partial output from a failed run is removed. Mirrors
+/// `sample_one`'s outcome + error reporting exactly.
 fn compress_one(item: &SampleItem) -> (SampleOutcome, Option<String>) {
     let src = Path::new(&item.src);
     let dest = Path::new(&item.dest);
@@ -1642,18 +1660,20 @@ fn compress_one(item: &SampleItem) -> (SampleOutcome, Option<String>) {
         }
     }
 
-    let bitrate = format!("{OPUS_BITRATE_KBPS}k");
+    let bitrate = format!("{WEB_AAC_BITRATE_KBPS}k");
+    let rate = WEB_SAMPLE_RATE_HZ.to_string();
     let mut cmd = tool_cmd("ffmpeg");
     cmd.args(["-nostdin", "-i"])
         .arg(src)
         // -vn: audio only. Clips carry no video, but stay defensive for the same
         // reason as sample_one (broken embedded art aborting the whole encode).
-        // -ac 2: downmix to stereo. Web discovery clips want stereo anyway, and
-        // libopus rejects multichannel sources (e.g. a 5.1 FLAC) under the
-        // default mapping family — so this both web-optimises and fixes surround
-        // clips that would otherwise fail with "Invalid channel layout".
+        // -ac 2: downmix to stereo. Web discovery clips want stereo, and it keeps
+        // a 5.1 FLAC from becoming a 5.1 AAC that half the players mishandle.
+        // -f mp4: say the container outright rather than leave it to the
+        // extension.
         .args([
-            "-vn", "-ac", "2", "-c:a", "libopus", "-b:a", &bitrate, "-vbr", "on", "-y",
+            "-vn", "-ac", "2", "-ar", &rate, "-c:a", "aac", "-b:a", &bitrate,
+            "-movflags", "+faststart", "-f", "mp4", "-y",
         ])
         .arg(dest);
 
@@ -1806,7 +1826,7 @@ async fn scan_sample_dest(
 }
 
 /// Like `scan_sample_dest`, but for the Compress step: enumerate the already
-/// web-encoded `.<duration_secs>s.opus` clips under the compress dest, returning
+/// web-encoded `.<duration_secs>s.m4a` clips under the compress dest, returning
 /// their signatures (relpath with the suffix stripped). Pair with the sampled
 /// signatures to find which FLAC clips still need compressing.
 #[tauri::command]
@@ -1819,7 +1839,7 @@ async fn scan_compress_dest(
         if !root.is_dir() {
             return Ok(Vec::new());
         }
-        let suffix = format!(".{duration_secs}s.opus");
+        let suffix = format!(".{duration_secs}s.{WEB_CLIP_EXT}");
         let mut sigs = Vec::new();
         for entry in WalkDir::new(&root).into_iter().filter_map(|e| e.ok()) {
             if !entry.file_type().is_file() {
@@ -2237,9 +2257,9 @@ fn sample_inner(
     Ok(report)
 }
 
-// ---- Compress: FLAC clips -> web-optimised Opus -------------------------
+// ---- Compress: FLAC clips -> web-optimised AAC --------------------------
 // A separate step from Sample (own dest, own cancel flag): re-encode the FLAC
-// clips under the workspace dest into `.opus` under the compress dest, mirroring
+// clips under the workspace dest into `.m4a` under the compress dest, mirroring
 // the tree. Reuses SampleItem / SampleOutcome / SampleProgress / SampleReport.
 
 #[tauri::command]
@@ -2262,7 +2282,7 @@ fn cancel_compress(cancel: tauri::State<CompressCancel>) {
     cancel.0.store(true, Ordering::Relaxed);
 }
 
-/// Batch Opus-encode FLAC clips. Mirrors `sample_inner` (rayon pool, per-item
+/// Batch AAC-encode FLAC clips. Mirrors `sample_inner` (rayon pool, per-item
 /// progress, cancel flag) but calls `compress_one` and emits `compress-progress`.
 fn compress_inner(
     items: Vec<SampleItem>,

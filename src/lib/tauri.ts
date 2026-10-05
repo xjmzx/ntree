@@ -289,7 +289,7 @@ export async function scanSampleDest(
 }
 
 /**
- * Compress step — re-encode FLAC clips (`items[].src`) to web-optimised Opus
+ * Compress step — re-encode FLAC clips (`items[].src`) to web-optimised AAC
  * (`items[].dest`). Reuses the SampleItem / SampleReport shapes; idempotent
  * (existing dest skipped). Progress arrives on the "compress-progress" channel.
  */
@@ -308,7 +308,7 @@ export async function cancelCompress(): Promise<void> {
 }
 
 /**
- * Signatures of already web-encoded (`.<dur>s.opus`) clips under the compress
+ * Signatures of already web-encoded (`.<dur>s.m4a`) clips under the compress
  * dest — pair with `scanSampleDest` results to find which FLAC clips still need
  * compressing. Empty list if the dest doesn't exist yet.
  */
