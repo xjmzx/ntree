@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { uniquePairs } from "./paths";
+import { uniqueDirRels } from "./paths";
 import {
   createMirrorTree,
   listDestFolders,
@@ -61,7 +61,12 @@ export function useMirror({
   // have seen one of them.
   const [orphanFiles, setOrphanFiles] = useState<string[]>([]);
 
-  const pairs = useMemo(() => uniquePairs(rows, libRoot), [rows, libRoot]);
+  // The folders to create are the source folders themselves, path for path.
+  // They used to be rebuilt from (artist, release) display pairs, which made a
+  // literal "(no album)" folder for every loose-track artist and a tidied
+  // duplicate of any folder whose name the tidying changed — each one empty,
+  // each one then listed as an orphan, and each one re-made by the next run.
+  const mirrorRels = useMemo(() => uniqueDirRels(rows, libRoot), [rows, libRoot]);
 
   // Mirror state up to the shared output strip.
   useEffect(() => {
@@ -117,14 +122,14 @@ export function useMirror({
 
   async function createMirror() {
     const target = dest.trim();
-    if (!target || pairs.length === 0) return;
+    if (!target || mirrorRels.length === 0) return;
     setState({ kind: "running" });
     onStatus({
       text: sudo ? "mirroring… (pkexec — watch for prompt)" : "mirroring…",
       tone: "warn",
     });
     try {
-      const result = await createMirrorTree(target, libRoot, pairs, sudo);
+      const result = await createMirrorTree(target, libRoot, mirrorRels, sudo);
       setState({ kind: "done", result });
       refreshFolders();
       // Detail (created / skipped / errors) lives in the OperationOutput strip;
@@ -181,7 +186,7 @@ export function useMirror({
   }
 
   const running = state.kind === "running";
-  const canRun = !!dest.trim() && pairs.length > 0 && !running;
+  const canRun = !!dest.trim() && mirrorRels.length > 0 && !running;
 
   return {
     sudo,
@@ -189,7 +194,7 @@ export function useMirror({
     createMirror,
     running,
     canRun,
-    pairs,
+    mirrorRels,
     orphans,
     trashFolder,
     orphanFiles,

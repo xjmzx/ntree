@@ -1239,11 +1239,29 @@ fn normalize_inner(
     Ok(report)
 }
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct MirrorPair {
-    artist: String,
-    release: String,
+/// Where one mirrored folder goes: `dest` + the source folder's relpath, taken
+/// exactly as it is on disk.
+///
+/// The clip tree mirrors the source tree name for name — that is how a clip is
+/// found from its track. So nothing here may tidy a name: a folder called
+/// " Over The Edge" (leading space) or "...And the Circus Leaves Town" has a
+/// clip folder called precisely that, and a helpfully trimmed or de-dotted copy
+/// is a second, empty folder that matches no source and is reported as an
+/// orphan on every scan.
+///
+/// The guard is on the path's shape, not its spelling: every component must be
+/// an ordinary name. An absolute path, a `..`, or an empty relpath is refused,
+/// so a folder can only ever be created inside `dest`.
+fn mirror_target(dest: &Path, rel: &str) -> Option<PathBuf> {
+    use std::path::Component;
+    if rel.is_empty() || rel.contains('\0') {
+        return None;
+    }
+    let rel_path = Path::new(rel);
+    if !rel_path.components().all(|c| matches!(c, Component::Normal(_))) {
+        return None;
+    }
+    Some(dest.join(rel_path))
 }
 
 #[derive(Serialize)]
@@ -1258,21 +1276,23 @@ struct MirrorResult {
 async fn create_mirror_tree(
     dest: String,
     source_root: String,
-    pairs: Vec<MirrorPair>,
+    // Source folders that hold scanned files, as relpaths under the library
+    // root. Each becomes the same relpath under `dest`.
+    rels: Vec<String>,
     sudo: bool,
 ) -> Result<MirrorResult, String> {
     tauri::async_runtime::spawn_blocking(move || {
         if sudo {
-            mirror_tree_privileged(dest, source_root, pairs)
+            mirror_tree_privileged(dest, source_root, rels)
         } else {
-            mirror_tree_plain(dest, pairs)
+            mirror_tree_plain(dest, rels)
         }
     })
     .await
     .map_err(|e| e.to_string())?
 }
 
-fn mirror_tree_plain(dest: String, pairs: Vec<MirrorPair>) -> Result<MirrorResult, String> {
+fn mirror_tree_plain(dest: String, rels: Vec<String>) -> Result<MirrorResult, String> {
     let dest_pb = PathBuf::from(&dest);
     if dest_pb.exists() && !dest_pb.is_dir() {
         return Err(format!("destination exists and is not a directory: {dest}"));
@@ -1283,14 +1303,11 @@ fn mirror_tree_plain(dest: String, pairs: Vec<MirrorPair>) -> Result<MirrorResul
     let mut created = 0usize;
     let mut skipped = 0usize;
     let mut errors: Vec<String> = Vec::new();
-    for pair in pairs {
-        let artist = sanitize(&pair.artist);
-        let release = sanitize(&pair.release);
-        if artist.is_empty() || release.is_empty() {
-            errors.push(format!("skipped empty pair: {:?}/{:?}", pair.artist, pair.release));
+    for rel in rels {
+        let Some(target) = mirror_target(&dest_pb, &rel) else {
+            errors.push(format!("skipped — not a folder inside the library: {rel:?}"));
             continue;
-        }
-        let target = dest_pb.join(&artist).join(&release);
+        };
         if target.exists() {
             skipped += 1;
             continue;
@@ -1374,7 +1391,7 @@ fn run_privileged(script: &str) -> Result<(), String> {
 fn mirror_tree_privileged(
     dest: String,
     source_root: String,
-    pairs: Vec<MirrorPair>,
+    rels: Vec<String>,
 ) -> Result<MirrorResult, String> {
     use std::os::unix::fs::MetadataExt;
 
@@ -1387,18 +1404,15 @@ fn mirror_tree_privileged(
     let gid = src_meta.gid();
     let mode = src_meta.mode() & 0o7777;
 
-    // Sanitize + classify pairs into existing (skip) vs missing (need mkdir).
+    // Classify the folders into existing (skip) vs missing (need mkdir).
     let mut to_create: Vec<PathBuf> = Vec::new();
     let mut skipped = 0usize;
     let mut errors: Vec<String> = Vec::new();
-    for pair in pairs {
-        let artist = sanitize(&pair.artist);
-        let release = sanitize(&pair.release);
-        if artist.is_empty() || release.is_empty() {
-            errors.push(format!("skipped empty pair: {:?}/{:?}", pair.artist, pair.release));
+    for rel in rels {
+        let Some(target) = mirror_target(&dest_pb, &rel) else {
+            errors.push(format!("skipped — not a folder inside the library: {rel:?}"));
             continue;
-        }
-        let target = dest_pb.join(&artist).join(&release);
+        };
         if target.exists() {
             skipped += 1;
         } else {
@@ -1431,14 +1445,6 @@ fn mirror_tree_privileged(
         skipped,
         errors,
     })
-}
-
-fn sanitize(component: &str) -> String {
-    component
-        .trim()
-        .trim_matches('/')
-        .replace("..", "_")
-        .replace('\0', "")
 }
 
 /// Single-quote-wrap a string for embedding in an `sh -c` script. Embedded
@@ -3000,6 +3006,33 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod mirror_target_tests {
+    use super::*;
+
+    #[test]
+    fn a_folder_keeps_its_name_exactly() {
+        let dest = Path::new("/clips");
+        for rel in [
+            "Wipers/ Over The Edge",                   // leading space
+            "Kyuss/...And the Circus Leaves Town",      // leading dots
+            "Public Image Ltd./This Is What You Want",  // trailing dot
+            "Soundtracks/The The/Hyena/CD1",            // any depth
+            "Andrew Wasylyk",                           // files straight in the artist folder
+        ] {
+            assert_eq!(mirror_target(dest, rel), Some(dest.join(rel)), "{rel}");
+        }
+    }
+
+    #[test]
+    fn nothing_outside_the_destination() {
+        let dest = Path::new("/clips");
+        for rel in ["", "/etc", "../music", "Artist/../../etc", "a\0b"] {
+            assert_eq!(mirror_target(dest, rel), None, "{rel:?}");
+        }
+    }
 }
 
 #[cfg(test)]

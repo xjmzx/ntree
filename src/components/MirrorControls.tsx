@@ -15,7 +15,7 @@ export function MirrorControls({
   mirror: UseMirror;
   dest: string;
 }) {
-  const { sudo, setSudo, createMirror, running, canRun, pairs } = mirror;
+  const { sudo, setSudo, createMirror, running, canRun, mirrorRels } = mirror;
   return (
     <div className="flex items-center gap-1.5 shrink-0">
       <label
@@ -48,11 +48,11 @@ export function MirrorControls({
         title={
           running
             ? "creating…"
-            : pairs.length === 0
+            : mirrorRels.length === 0
               ? "Scan or clear the filter first"
               : !dest.trim()
                 ? "Choose a destination directory"
-                : `Create ${pairs.length} release folder${pairs.length === 1 ? "" : "s"} under ${dest} (build the mirror tree)`
+                : `Mirror ${mirrorRels.length} source folder${mirrorRels.length === 1 ? "" : "s"} under ${dest} (existing ones are skipped)`
         }
         aria-label="Create mirror tree"
       >

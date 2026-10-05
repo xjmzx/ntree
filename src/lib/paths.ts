@@ -43,6 +43,32 @@ export function collapseDiscAlbum(album: string): string {
   return album;
 }
 
+/**
+ * The folder a scanned file sits in, as a relpath under the library root —
+ * "" for a file directly in the root. Taken from the path as it is on disk:
+ * this is the key the clip tree mirrors, so it is never tidied or re-derived.
+ */
+export function sourceDirRel(fp: string, root: string): string {
+  let rel = root && fp.startsWith(root) ? fp.slice(root.length) : fp;
+  rel = rel.replace(/^\/+/, "");
+  const i = rel.lastIndexOf("/");
+  return i < 0 ? "" : rel.slice(0, i);
+}
+
+/**
+ * Distinct source folders across a set of scan rows — what the clip tree has to
+ * mirror. NOT `uniquePairs`: that one is for display and counting, and its
+ * "(no album)" stand-in and joined middle segments are not folder names.
+ */
+export function uniqueDirRels(rows: ScanRow[], libRoot: string): string[] {
+  const seen = new Set<string>();
+  for (const r of rows) {
+    const rel = sourceDirRel(r.path, libRoot);
+    if (rel) seen.add(rel);
+  }
+  return [...seen];
+}
+
 /** Distinct (artist, release) pairs across a set of scan rows. */
 export function uniquePairs(rows: ScanRow[], libRoot: string): MirrorPair[] {
   const seen = new Set<string>();

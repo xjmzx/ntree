@@ -164,13 +164,14 @@ export async function cancelScan(): Promise<void> {
 export async function createMirrorTree(
   dest: string,
   sourceRoot: string,
-  pairs: MirrorPair[],
+  // Source folders (relpaths under the library root) to mirror under dest.
+  rels: string[],
   sudo: boolean,
 ): Promise<MirrorResult> {
   return invoke<MirrorResult>("create_mirror_tree", {
     dest,
     sourceRoot,
-    pairs,
+    rels,
     sudo,
   });
 }
