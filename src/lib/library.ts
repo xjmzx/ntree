@@ -52,11 +52,41 @@ const SCANNER_ROOT_KEY = "afqc-tauri.scanner.root";
 const WORKSPACE_DEST_KEY = "afqc-tauri.workspace.dest";
 const COMPRESS_DEST_KEY = "afqc-tauri.compress.dest";
 const PUBLISH_RELAY_KEY = "afqc-tauri.publish.relay";
-const DEFAULT_PUBLISH_RELAY = "wss://relay.fizx.uk";
-// The locked secondary: the hub's mirror, our own. It was nos.lol + primal until
-// 0.4.1 — neither kept this key's events (checked 2026-10-02), and the rest of
-// the suite had already moved to fizx + nfunc.
-const SECONDARY_RELAYS = ["wss://relay.nfunc.xyz"];
+// relay.nfunc.xyz is the suite's one relay. It used to be the locked secondary
+// behind relay.fizx.uk (and nos.lol + primal before 0.4.1 — neither kept this
+// key's events, checked 2026-10-02); fizx.uk was decommissioned and no longer
+// resolves, so nfunc is now the publish relay and there is no secondary.
+const DEFAULT_PUBLISH_RELAY = "wss://relay.nfunc.xyz";
+// Locked extras joined after the publish relay. Empty for now; kept so the
+// header chip / publish fan-out shape survives a future second relay.
+const SECONDARY_RELAYS: string[] = [];
+// Dead relays to strip from saved state. Every install before this one wrote
+// relay.fizx.uk into PUBLISH_RELAY_KEY on first mount (usePersistedString
+// persists its fallback), so without this they would keep publishing there.
+const DEAD_RELAY_HOSTS = ["relay.fizx.uk"];
+
+function isDeadRelay(url: string): boolean {
+  const host = url
+    .trim()
+    .replace(/^wss?:\/\//i, "")
+    .replace(/\/+$/, "")
+    .toLowerCase();
+  return DEAD_RELAY_HOSTS.includes(host);
+}
+
+/** One-shot, idempotent: rewrite a saved dead publish relay to the default
+ *  before the persisted hook reads it. */
+function migrateSavedPublishRelay(): void {
+  try {
+    const saved = localStorage.getItem(PUBLISH_RELAY_KEY);
+    if (saved !== null && isDeadRelay(saved)) {
+      localStorage.setItem(PUBLISH_RELAY_KEY, DEFAULT_PUBLISH_RELAY);
+    }
+  } catch {
+    // storage unavailable — nothing saved to migrate
+  }
+}
+migrateSavedPublishRelay();
 
 export interface Library {
   /** The "DB": the current scan report (null until loaded/scanned). */
@@ -73,7 +103,7 @@ export interface Library {
   setCompressDest: (v: string) => void;
   /** Editable first relay (persisted); joined with the locked secondaries. */
   publishRelay: string;
-  /** Effective relay trio used across reads/publish. */
+  /** Effective relay list used across reads/publish (publish relay first). */
   relays: string[];
   /** The library root the rows are relative to: the report's root if loaded,
    *  else the configured scanner root. */
@@ -98,7 +128,9 @@ export function useLibrary(): Library {
   );
   const relays = useMemo(
     () => {
-      const primary = publishRelay.trim() || DEFAULT_PUBLISH_RELAY;
+      const saved = publishRelay.trim();
+      const primary =
+        saved && !isDeadRelay(saved) ? saved : DEFAULT_PUBLISH_RELAY;
       // A publish relay set to the mirror itself must not be listed twice.
       return [primary, ...SECONDARY_RELAYS.filter((r) => r !== primary)];
     },

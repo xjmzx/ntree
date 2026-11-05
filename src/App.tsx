@@ -81,7 +81,7 @@ const SAMPLE_START_OFFSET_SECS = 30;
 // library data. Scanner root / workspace dest / relays moved to lib/library
 // (the report-DB + config store).
 const THEME_KEY = "afqc-tauri.theme";
-const PROFILE_RELAYS = ["wss://relay.fizx.uk"];
+const PROFILE_RELAYS = ["wss://relay.nfunc.xyz"];
 /** Monochrome is the default: chrome greyscale, meaning keeps its colour. */
 type Theme = "fizx" | "upleb" | "mono";
 
@@ -1422,9 +1422,9 @@ export default function App() {
           </span>
         )}
 
-        {/* Relay indicator — first host is the user-editable publish
-            relay (defaults to wss://relay.fizx.uk), the rest is the
-            locked secondary (its mirror). Tooltip shows the full ws:// URLs. */}
+        {/* Relay indicator — first host is the publish relay
+            (wss://relay.nfunc.xyz), then any locked secondaries (none
+            today). Tooltip shows the full ws:// URLs. */}
         <span
           className="inline-flex items-center gap-1.5 font-mono min-w-0"
           title={relays.map((r) => r).join("\n")}
@@ -1434,13 +1434,15 @@ export default function App() {
             <span className="text-fg/80">
               {relays[0].replace(/^wss:\/\//, "")}
             </span>
-            <span className="text-muted/70">
-              {" · "}
-              {relays
-                .slice(1)
-                .map((r) => r.replace(/^wss:\/\//, ""))
-                .join(" · ")}
-            </span>
+            {relays.length > 1 && (
+              <span className="text-muted/70">
+                {" · "}
+                {relays
+                  .slice(1)
+                  .map((r) => r.replace(/^wss:\/\//, ""))
+                  .join(" · ")}
+              </span>
+            )}
           </span>
         </span>
       </footer>

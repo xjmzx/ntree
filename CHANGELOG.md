@@ -17,6 +17,20 @@ ndisc's `published.json` manifest, and `~/.config/ndisc-suite/roots.json`).
 > The **0.2.7** entry covers a six-week, 37-commit stretch that was tagged only
 > at the end of it.
 
+## Unreleased
+
+### Changed — relay.fizx.uk is gone: relay.nfunc.xyz is the only relay
+
+The fizx.uk server was decommissioned and `relay.fizx.uk` no longer resolves, so
+every path that used it was dead. **`wss://relay.nfunc.xyz`** — the same
+nostr-rs-relay build, already holding the catalogue — is now the publish relay,
+the feed relay, the reaction relay (read and write) and the header-profile relay.
+There is no locked secondary any more, so a clip is published once, not twice
+to the same relay.
+
+Installs that saved `relay.fizx.uk` as the publish relay (every earlier install
+did, on first launch) are rewritten to `relay.nfunc.xyz` once, on load.
+
 ## 0.4.3 — 2026-10-06
 
 ### Fixed — "create mirror" made its own orphans

@@ -128,7 +128,7 @@ interface FeedPanelProps {
 }
 
 export function FeedPanel({ identity, relays, onCollapse }: FeedPanelProps) {
-  const RELAY_URL = relays[0] ?? "wss://relay.fizx.uk";
+  const RELAY_URL = relays[0] ?? "wss://relay.nfunc.xyz";
   const [events, setEvents] = useState<NostrEvent[]>([]);
   const [status, setStatus] = useState<Status>("idle");
   const [errMsg, setErrMsg] = useState<string | null>(null);
