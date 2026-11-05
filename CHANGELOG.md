@@ -17,7 +17,7 @@ ndisc's `published.json` manifest, and `~/.config/ndisc-suite/roots.json`).
 > The **0.2.7** entry covers a six-week, 37-commit stretch that was tagged only
 > at the end of it.
 
-## Unreleased
+## 0.4.4 — 2026-11-05
 
 ### Changed — relay.fizx.uk is gone: relay.nfunc.xyz is the only relay
 
