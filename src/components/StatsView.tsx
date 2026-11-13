@@ -2,17 +2,7 @@ import { LineChart } from "lucide-react";
 import { Section } from "./Section";
 import { cn } from "../lib/cn";
 import type { ScanRow, Verdict } from "../lib/tauri";
-
-// The five scan verdicts, in bar order, with their suite colours (matching the
-// header verdict bar + LibraryTree). Lossless ← ok green; Probably-lossy ←
-// alert; Uncertain ← warn; Lossy ← mauve; Unknown ← muted.
-const VERDICT_META: { key: Verdict; label: string; bar: string; text: string }[] = [
-  { key: "LOSSLESS", label: "Lossless", bar: "bg-ok", text: "text-ok" },
-  { key: "PROBABLY-LOSSY", label: "Probably lossy", bar: "bg-alert", text: "text-alert" },
-  { key: "UNCERTAIN", label: "Uncertain", bar: "bg-warn", text: "text-warn" },
-  { key: "LOSSY", label: "Lossy", bar: "bg-lossy", text: "text-lossy" },
-  { key: "UNKNOWN", label: "Unknown", bar: "bg-muted", text: "text-muted" },
-];
+import { VERDICT_META, verdictRollup, lossyGroupText } from "../lib/verdicts";
 
 interface StatsViewProps {
   counts: Record<Verdict, number>;
@@ -63,12 +53,8 @@ export function StatsView({ counts, rows }: StatsViewProps) {
   const pct = (n: number) => (total ? (100 * n) / total : 0);
   const fmtPct = (n: number) => `${pct(n).toFixed(pct(n) < 10 ? 1 : 0)}%`;
 
-  // Headline lossless / lossy / uncertain rollup. Probably-lossy folds into
-  // lossy (a "lossless" file that's actually a transcode); uncertain + unknown
-  // are the can't-tell bucket.
-  const lossless = counts.LOSSLESS;
-  const lossy = counts.LOSSY + counts["PROBABLY-LOSSY"];
-  const unsure = counts.UNCERTAIN + counts.UNKNOWN;
+  // Headline lossless / lossy / uncertain rollup (see verdictRollup).
+  const { lossless, lossy, unsure } = verdictRollup(counts);
 
   // The technical picture. `codec` is null on reports written before the
   // scanner captured it, so an old report shows the verdicts but no detail —
@@ -112,7 +98,7 @@ export function StatsView({ counts, rows }: StatsViewProps) {
             {/* Headline rollup — lossless vs lossy vs uncertain. */}
             <div className="grid grid-cols-3 gap-3">
               <Headline label="Lossless" n={lossless} pct={fmtPct(lossless)} cls="text-ok" />
-              <Headline label="Lossy" n={lossy} pct={fmtPct(lossy)} cls="text-lossy" />
+              <Headline label="Lossy" n={lossy} pct={fmtPct(lossy)} cls={lossyGroupText(counts)} />
               <Headline label="Uncertain" n={unsure} pct={fmtPct(unsure)} cls="text-warn" />
             </div>
 

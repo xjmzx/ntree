@@ -1,3 +1,4 @@
+import { VERDICT_META, verdictRollup, fmtPct, lossyGroupText } from "./lib/verdicts";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import {
@@ -940,40 +941,52 @@ export default function App() {
           grid column (1fr_auto_1fr), centered between title and right edge.
         */}
         {report && (
-          <div className="hidden md:flex flex-col items-center gap-1.5 min-w-[520px]">
+          <div className="hidden md:flex flex-col items-stretch gap-1 min-w-[520px]">
             {(() => {
-              // Denominator excludes video so the audio-verdict segments fill
-              // the bar correctly (counts already exclude video).
-              const total = Math.max(1, report.rows.length - videoCount);
-              const seg = (n: number) => (100 * n) / total;
+              // The same verdicts, order and colours as the Library Quality
+              // page (lib/verdicts). Counts already exclude video.
+              const { total, lossless, lossy, unsure } = verdictRollup(counts);
+              const seg = (n: number) => (total ? (100 * n) / total : 0);
+              const groups = [
+                { label: "lossless", n: lossless, cls: "text-ok", title: `${lossless.toLocaleString()} lossless` },
+                {
+                  label: "lossy",
+                  n: lossy,
+                  cls: lossyGroupText(counts),
+                  title: `${counts["PROBABLY-LOSSY"].toLocaleString()} probably lossy + ${counts.LOSSY.toLocaleString()} lossy`,
+                },
+                {
+                  label: "uncertain",
+                  n: unsure,
+                  cls: "text-warn",
+                  title: `${counts.UNCERTAIN.toLocaleString()} uncertain + ${counts.UNKNOWN.toLocaleString()} unknown`,
+                },
+              ];
               return (
-                <div className="w-full h-1.5 rounded-sm overflow-hidden bg-bg/60 flex">
-                  <div
-                    className="h-full bg-ok"
-                    style={{ width: `${seg(counts.LOSSLESS)}%` }}
-                    title={`LOSSLESS ${counts.LOSSLESS.toLocaleString()}`}
-                  />
-                  <div
-                    className="h-full bg-alert"
-                    style={{ width: `${seg(counts["PROBABLY-LOSSY"])}%` }}
-                    title={`PROBABLY-LOSSY ${counts["PROBABLY-LOSSY"].toLocaleString()}`}
-                  />
-                  <div
-                    className="h-full bg-warn"
-                    style={{ width: `${seg(counts.UNCERTAIN)}%` }}
-                    title={`UNCERTAIN ${counts.UNCERTAIN.toLocaleString()}`}
-                  />
-                  <div
-                    className="h-full bg-mauve"
-                    style={{ width: `${seg(counts.LOSSY)}%` }}
-                    title={`LOSSY ${counts.LOSSY.toLocaleString()}`}
-                  />
-                  <div
-                    className="h-full bg-muted"
-                    style={{ width: `${seg(counts.UNKNOWN)}%` }}
-                    title={`UNKNOWN ${counts.UNKNOWN.toLocaleString()}`}
-                  />
-                </div>
+                <>
+                  <div className="w-full h-3 rounded-sm overflow-hidden bg-bg/60 flex">
+                    {VERDICT_META.map((v) => (
+                      <div
+                        key={v.key}
+                        className={`h-full ${v.bar}`}
+                        style={{ width: `${seg(counts[v.key])}%` }}
+                        title={`${v.label} · ${counts[v.key].toLocaleString()} · ${fmtPct(counts[v.key], total)}`}
+                      />
+                    ))}
+                  </div>
+                  {/* The headline split, as on the Library Quality page; each
+                      group is one contiguous span of the bar above. */}
+                  <div className="flex justify-center gap-4 text-[11px] font-mono tabular-nums text-muted">
+                    {groups.map((g) => (
+                      <span key={g.label} title={g.title}>
+                        <span className={g.cls}>{fmtPct(g.n, total)}</span> {g.label}
+                      </span>
+                    ))}
+                    <span title="audio tracks in the scan report">
+                      of {total.toLocaleString()}
+                    </span>
+                  </div>
+                </>
               );
             })()}
           </div>

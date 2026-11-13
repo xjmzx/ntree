@@ -36,9 +36,9 @@ const HIRES_TITLE: Record<HiRes, string> = {
 
 const VERDICT_COLOR: Record<Verdict, string> = {
   LOSSLESS: "text-ok",
-  "PROBABLY-LOSSY": "text-alert",
+  "PROBABLY-LOSSY": "text-lossy",
   UNCERTAIN: "text-warn",
-  LOSSY: "text-lossy",
+  LOSSY: "text-codec",
   UNKNOWN: "text-muted",
 };
 
@@ -566,16 +566,17 @@ export function LibraryTree({
                 {/* Trailing status block — ONE continuous strip carrying the
                     count badge's fill, so the video marker + coverage bar + both
                     dots read as the same block as the count they sit beside (not
-                    transparent, not their own contrasting chips). rounded-tr
-                    forms the row's corner. The accent name pill is the row's
-                    only other block. */}
-                <div className={cn("shrink-0 flex items-center gap-1 pl-2 pr-1 bg-medium/15 group-hover/row:bg-medium/25 rounded-tr-xl transition-colors", D.artist)}>
+                    transparent, not their own contrasting chips). It shares the
+                    name pill's accent fill, so the artist row is one even band
+                    in every theme (a second colour here met the first in a
+                    visible seam). rounded-tr forms the row's corner. */}
+                <div className={cn("shrink-0 flex items-center gap-1 pl-2 pr-1 bg-accent/10 group-hover/row:bg-accent/25 rounded-tr-xl transition-colors", D.artist)}>
                   {/* Video-file marker — lives inside the filled status block
                       (mirrors the album row's Film marker), so it tracks the
                       block fill + density instead of floating bare in the gap.
                       Muted mauve (not full) so it sits back into the subtle
-                      status strip rather than shouting over the accent/10 +
-                      medium/15 fills around it. */}
+                      status strip rather than shouting over the accent/10
+                      fill around it. */}
                   {artist.videoCount > 0 && (
                     <span
                       className="inline-flex items-center gap-0.5 text-mauve/60"
@@ -649,9 +650,9 @@ export function LibraryTree({
                         : `Sample ${album.tracks.length} tracks from this release — 10s each`;
                   return (
                     <div key={key}>
-                      {/* Release row: the whole left side (chevron · title ·
-                          bar · dots) is ONE continuous filled block; the only
-                          break is the gap before the [o] sample indicator. */}
+                      {/* Release row: chevron · title · bar · dots, then the
+                          [o] sample indicator, on the Library's own background;
+                          the whole row lifts together on hover. */}
                       {/* Density scales the height of the colour blocks
                           themselves (the web title block + the items-stretch
                           sample button), not the outer wrapper — so the filled
@@ -664,7 +665,10 @@ export function LibraryTree({
                             "flex-1 min-w-0 flex items-center gap-1.5 pl-8 pr-2",
                             D.album,
                             "text-left text-fg italic text-sm",
-                            "bg-web/15 group-hover/album:bg-web/25 transition-colors",
+                            // No fill of its own: the release row sits on the
+                            // Library's background, lifting only on hover, so
+                            // it matches the panel in every theme.
+                            "group-hover/album:bg-fg/5 transition-colors",
                           )}
                         >
                           {alOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
@@ -700,7 +704,7 @@ export function LibraryTree({
                           }
                           title={alDotTitle}
                           className="shrink-0 inline-flex items-center justify-center
-                                     px-1.5 rounded-tr-xl bg-web/15 group-hover/album:bg-web/25
+                                     px-1.5 rounded-tr-xl group-hover/album:bg-fg/5
                                      transition-colors"
                           aria-label={`Sample release ${album.name}`}
                         >

@@ -37,6 +37,11 @@
      collapses into UNKNOWN (--c-muted). Same lesson as ndisc's --c-nostr.
      Deliberately identical across all themes. */
   --c-lossy: 167 139 250;
+  /* LOSSY-codec verdict (an MP3 or AAC file). A calm dusty teal, not red: on a
+     real library it is two fifths of every bar, an expected state rather than
+     a warning, and it must stay apart from the lilac "probably lossy" and the
+     grey "unknown". Its own token, identical across themes, like --c-lossy. */
+  --c-codec: 94 158 168;
   /* Published to Nostr (kind:1063 clip / kind:31237 release scope). Its own
      token for the same reason as --c-lossy: it is a STATE, not brand, and the
      monochrome theme greys the brand. On --c-mauve it would collapse into the
@@ -66,6 +71,11 @@
      collapses into UNKNOWN (--c-muted). Same lesson as ndisc's --c-nostr.
      Deliberately identical across all themes. */
   --c-lossy: 167 139 250;
+  /* LOSSY-codec verdict (an MP3 or AAC file). A calm dusty teal, not red: on a
+     real library it is two fifths of every bar, an expected state rather than
+     a warning, and it must stay apart from the lilac "probably lossy" and the
+     grey "unknown". Its own token, identical across themes, like --c-lossy. */
+  --c-codec: 94 158 168;
   /* Published to Nostr (kind:1063 clip / kind:31237 release scope). Its own
      token for the same reason as --c-lossy: it is a STATE, not brand, and the
      monochrome theme greys the brand. On --c-mauve it would collapse into the

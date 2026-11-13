@@ -11,9 +11,9 @@ const SAMPLE_START_OFFSET_SECS = 30;
 
 const VERDICT_COLOR: Record<Verdict, string> = {
   LOSSLESS: "text-ok",
-  "PROBABLY-LOSSY": "text-alert",
+  "PROBABLY-LOSSY": "text-lossy",
   UNCERTAIN: "text-warn",
-  LOSSY: "text-lossy",
+  LOSSY: "text-codec",
   UNKNOWN: "text-muted",
 };
 

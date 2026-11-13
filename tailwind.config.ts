@@ -27,6 +27,7 @@ export default {
         alert: c("--c-alert"),
         mauve: c("--c-mauve"),
         lossy: c("--c-lossy"),
+        codec: c("--c-codec"),
         nostr: c("--c-nostr"),
         auburn: c("--c-auburn"),
       },
