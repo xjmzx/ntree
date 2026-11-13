@@ -17,6 +17,14 @@ ndisc's `published.json` manifest, and `~/.config/ndisc-suite/roots.json`).
 > The **0.2.7** entry covers a six-week, 37-commit stretch that was tagged only
 > at the end of it.
 
+## 0.4.7 — 2026-11-13
+
+### Changed
+- **New icon**: the n in a split circle.
+- **Header quality bar** is twice as tall (easier to hover), and the lossless / lossy / uncertain percentages sit under it, as on the Library Quality page, with the track count. The bar and the page share one list of verdicts, colours and order, so each headline figure is one continuous span of the bar.
+- **Verdict colours**: no red in the bar. Probably lossy is lilac; Lossy (a lossy codec, e.g. MP3) is a calm teal, since it is a large, expected share of a real library. The headline "lossy" figure takes the colour of its larger part.
+- **Library**: release rows sit on the Library's own background, lifting only on hover, instead of a fixed blue that clashed with every theme; an artist row is one even band (its status block shares the name's fill).
+
 ## 0.4.6 — 2026-11-13
 
 ### Added
