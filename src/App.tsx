@@ -857,6 +857,7 @@ export default function App() {
     rows: filteredRows,
     libRoot,
     dest: workspaceDest,
+    compressDest,
     sourceRels,
     onStatus: setStatus,
     onMirrorState: setMirrorState,

@@ -559,6 +559,22 @@ export async function orphanClips(
 
 /// Trash clip files. Guarded server-side: every path must resolve to something
 /// strictly inside `dest`. The source library is never a valid target.
+/// Compressed files whose clip is gone (relpath-minus-extension match against
+/// the clip tree). Empty when it cannot know: no clips, or overlapping trees.
+export async function orphanCompressed(comp: string, dest: string): Promise<string[]> {
+  return invoke<string[]>("orphan_compressed", { comp, dest });
+}
+
+/// Trash compressed files (guarded to the compress folder, never the source
+/// library) and remove the folders that leaves empty.
+export async function trashCompressed(
+  comp: string,
+  root: string,
+  paths: string[],
+): Promise<number> {
+  return invoke<number>("trash_compressed", { comp, root, paths });
+}
+
 export async function trashDestFiles(
   dest: string,
   root: string,

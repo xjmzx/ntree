@@ -4,6 +4,8 @@ import {
   createMirrorTree,
   listDestFolders,
   orphanClips,
+  orphanCompressed,
+  trashCompressed,
   trashDestFiles,
   trashDestFolder,
   type DestFolder,
@@ -29,6 +31,8 @@ interface UseMirrorArgs {
   libRoot: string;
   /** Shared workspace destination (set in the Destination panel). */
   dest: string;
+  /** The Compress panel's folder; its files whose clip is gone are orphans too. */
+  compressDest: string;
   /** Source releases ("artist/release"); clip folders not in here are orphans. */
   sourceRels: Set<string>;
   onStatus: (s: Status) => void;
@@ -47,6 +51,7 @@ export function useMirror({
   rows,
   libRoot,
   dest,
+  compressDest,
   sourceRels,
   onStatus,
   onMirrorState,
@@ -60,6 +65,9 @@ export function useMirror({
   // tracks in one release left 14 such clips, and the folder check could never
   // have seen one of them.
   const [orphanFiles, setOrphanFiles] = useState<string[]>([]);
+  // Compressed copies whose clip is gone. Trashing a clip never reached the
+  // compress tree, so these piled up (3,685 by 2026-11-13).
+  const [orphanComp, setOrphanComp] = useState<string[]>([]);
 
   // The folders to create are the source folders themselves, path for path.
   // They used to be rebuilt from (artist, release) display pairs, which made a
@@ -80,11 +88,19 @@ export function useMirror({
     if (!dest.trim()) {
       setFolders([]);
       setOrphanFiles([]);
+      setOrphanComp([]);
       return;
     }
     orphanClips(dest, libRoot, SAMPLE_SECS)
       .then(setOrphanFiles)
       .catch(() => setOrphanFiles([]));
+    if (compressDest.trim()) {
+      orphanCompressed(compressDest, dest)
+        .then(setOrphanComp)
+        .catch(() => setOrphanComp([]));
+    } else {
+      setOrphanComp([]);
+    }
     try {
       setFolders(await listDestFolders(dest));
     } catch (e) {
@@ -97,7 +113,7 @@ export function useMirror({
   useEffect(() => {
     refreshFolders();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dest]);
+  }, [dest, compressDest]);
 
   // Orphans = clip folders with no matching source directory (renamed/removed
   // sources, stale leftovers). The Library tree shows in-source releases;
@@ -201,6 +217,26 @@ export function useMirror({
     refreshFolders();
   }
 
+  async function trashOrphanCompressed() {
+    const n = orphanComp.length;
+    if (!n) return;
+    if (
+      !confirm(
+        `Trash ${n} compressed file${n === 1 ? "" : "s"} whose clip is gone? ` +
+          `Folders left empty are removed. Recoverable — goes to the OS trash.`,
+      )
+    ) {
+      return;
+    }
+    try {
+      const done = await trashCompressed(compressDest, libRoot, orphanComp);
+      onStatus({ text: `trashed ${done} compressed file(s)`, tone: "ok" });
+    } catch (e) {
+      onStatus({ text: `trash failed: ${e}`, tone: "alert" });
+    }
+    refreshFolders();
+  }
+
   async function trashOrphanFiles() {
     const n = orphanFiles.length;
     if (!n) return;
@@ -236,6 +272,8 @@ export function useMirror({
     trashOrphanFolders,
     orphanFiles,
     trashOrphanFiles,
+    orphanComp,
+    trashOrphanCompressed,
   };
 }
 

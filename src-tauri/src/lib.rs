@@ -2185,6 +2185,112 @@ async fn orphan_clips(
     .map_err(|e| e.to_string())?
 }
 
+/// `path` relative to `base`, without its extension, `/`-separated: the key a
+/// clip and its compressed copy share (`Artist/Release/01 Track.10s`).
+fn rel_stem(base: &Path, path: &Path) -> Option<String> {
+    let rel = path.strip_prefix(base).ok()?;
+    let mut s = rel.to_path_buf();
+    s.set_extension("");
+    Some(s.to_string_lossy().replace('\\', "/"))
+}
+
+/// Of `files` under `comp`, the ones whose key has no clip in `clip_keys`.
+fn stale_compressed(comp: &Path, files: &[PathBuf], clip_keys: &HashSet<String>) -> Vec<String> {
+    let mut out: Vec<String> = files
+        .iter()
+        .filter(|p| rel_stem(comp, p).map(|k| !clip_keys.contains(&k)).unwrap_or(false))
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect();
+    out.sort();
+    out
+}
+
+/// Compressed copies whose CLIP is gone. The compress tree mirrors the clip
+/// tree, a `.m4a` per `.flac` under the same relpath, so a compressed file is
+/// stale iff no clip shares its relpath-minus-extension. The clip-side Trash
+/// buttons never reached this tree, so every clip trashed or renamed left its
+/// compressed copy behind (3,685 of them, 616 MB, by 2026-11-13).
+///
+/// Says nothing rather than guess: no clips at all, or the two trees being one
+/// or nested, means "we cannot know", and this list feeds a delete button.
+#[tauri::command]
+async fn orphan_compressed(comp: String, dest: String) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || -> Result<Vec<String>, String> {
+        let comp_pb = PathBuf::from(&comp);
+        let dest_pb = PathBuf::from(&dest);
+        if !comp_pb.is_dir() || !dest_pb.is_dir() {
+            return Ok(Vec::new());
+        }
+        let (Ok(c), Ok(d)) = (comp_pb.canonicalize(), dest_pb.canonicalize()) else {
+            return Ok(Vec::new());
+        };
+        if c.starts_with(&d) || d.starts_with(&c) {
+            return Ok(Vec::new());
+        }
+        let clip_keys: HashSet<String> = WalkDir::new(&dest_pb)
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_type().is_file())
+            .filter_map(|e| rel_stem(&dest_pb, e.path()))
+            .collect();
+        if clip_keys.is_empty() {
+            return Ok(Vec::new());
+        }
+        let files: Vec<PathBuf> = WalkDir::new(&comp_pb)
+            .into_iter()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_type().is_file())
+            .map(|e| e.into_path())
+            .collect();
+        Ok(stale_compressed(&comp_pb, &files, &clip_keys))
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Trash compressed files (same guard as clips: strictly inside `comp`, never
+/// in the source library), then remove the folders that leaves empty, walking
+/// up from each file but never past `comp` itself. Only an empty folder is
+/// removed; one that still holds anything stays.
+#[tauri::command]
+async fn trash_compressed(comp: String, root: String, paths: Vec<String>) -> Result<usize, String> {
+    tauri::async_runtime::spawn_blocking(move || -> Result<usize, String> {
+        let base = PathBuf::from(&comp)
+            .canonicalize()
+            .map_err(|e| format!("compress folder: {e}"))?;
+        let mut n = 0usize;
+        let mut parents: HashSet<PathBuf> = HashSet::new();
+        for path in &paths {
+            let target = PathBuf::from(path);
+            guard_deletable(Path::new(&comp), Path::new(&root), &target)?;
+            let canon = target.canonicalize().map_err(|e| e.to_string())?;
+            if let Some(p) = canon.parent() {
+                parents.insert(p.to_path_buf());
+            }
+            trash::delete(&canon).map_err(|e| format!("trash failed for {path}: {e}"))?;
+            n += 1;
+        }
+        // Deepest first, so a release folder empties before its artist folder.
+        let mut dirs: Vec<PathBuf> = parents.into_iter().collect();
+        dirs.sort_by_key(|d| std::cmp::Reverse(d.components().count()));
+        for d in dirs {
+            let mut cur = d;
+            while cur != base && cur.starts_with(&base) {
+                if fs::remove_dir(&cur).is_err() {
+                    break; // not empty (or not ours to remove): stop here
+                }
+                match cur.parent() {
+                    Some(p) => cur = p.to_path_buf(),
+                    None => break,
+                }
+            }
+        }
+        Ok(n)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 /// Trash clip FILES. Same guard as `trash_dest_folder`: every path must
 /// canonicalize to something strictly inside the mirror destination. The source
 /// library is never a valid target — nothing in this app deletes from it.
@@ -2983,6 +3089,8 @@ pub fn run() {
             list_dest_folders,
             trash_dest_folder,
             orphan_clips,
+            orphan_compressed,
+            trash_compressed,
             trash_dest_files,
             create_dest_folder,
             read_audio_bytes,
@@ -3175,5 +3283,60 @@ mod applescript_tests {
     fn leaves_ordinary_paths_alone() {
         let q = shell_quote("/Users/me/Music/Album");
         assert_eq!(applescript_escape(&q), q);
+    }
+}
+
+#[cfg(test)]
+mod compressed_orphans {
+    use super::*;
+
+    #[test]
+    fn a_compressed_file_is_stale_only_without_its_clip() {
+        let comp = Path::new("/c");
+        let keys: HashSet<String> = ["A/R/01 One.10s", "A/R/02 Two.10s"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        let files: Vec<PathBuf> = [
+            "/c/A/R/01 One.10s.m4a",       // has its clip
+            "/c/A/R/03 Gone.10s.m4a",      // clip gone
+            "/c/Old/Release/01 X.10s.m4a", // whole release gone
+        ]
+        .into_iter()
+        .map(PathBuf::from)
+        .collect();
+        assert_eq!(
+            stale_compressed(comp, &files, &keys),
+            vec!["/c/A/R/03 Gone.10s.m4a", "/c/Old/Release/01 X.10s.m4a"]
+        );
+    }
+
+    #[test]
+    fn rel_stem_drops_only_the_last_extension() {
+        assert_eq!(
+            rel_stem(Path::new("/c"), Path::new("/c/A/R/01 One.10s.m4a")).as_deref(),
+            Some("A/R/01 One.10s")
+        );
+        assert_eq!(rel_stem(Path::new("/c"), Path::new("/elsewhere/x.m4a")), None);
+    }
+}
+
+#[cfg(test)]
+mod compressed_orphans_real {
+    use super::*;
+
+    /// Read-only check against a real library: `cargo test -- --ignored`.
+    /// Set NTREE_CLIPS and NTREE_COMP to the two folders.
+    #[test]
+    #[ignore]
+    fn count_on_real_trees() {
+        let (Ok(clips), Ok(comp)) = (std::env::var("NTREE_CLIPS"), std::env::var("NTREE_COMP")) else {
+            return;
+        };
+        let out = tauri::async_runtime::block_on(orphan_compressed(comp, clips)).unwrap();
+        println!("stale compressed: {}", out.len());
+        for p in out.iter().take(3) {
+            println!("  {p}");
+        }
     }
 }

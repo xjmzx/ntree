@@ -69,11 +69,19 @@ export function MirrorControls({
  * something to clean (so it costs zero height when the tree is tidy).
  */
 export function OrphanStrip({ mirror }: { mirror: UseMirror }) {
-  const { orphans, trashFolder, trashOrphanFolders, orphanFiles, trashOrphanFiles } = mirror;
+  const {
+    orphans,
+    trashFolder,
+    trashOrphanFolders,
+    orphanFiles,
+    trashOrphanFiles,
+    orphanComp,
+    trashOrphanCompressed,
+  } = mirror;
   // The folder list opens folded: the count and Trash all are what's usually
   // wanted, and a hundred-row list at launch squeezed the Library.
   const [showList, setShowList] = useState(false);
-  if (orphans.length === 0 && orphanFiles.length === 0) return null;
+  if (orphans.length === 0 && orphanFiles.length === 0 && orphanComp.length === 0) return null;
   return (
     <div className="rounded-md bg-bg/40 border border-warn/30">
       {/* FILE-grain orphans: the source track was renamed or removed while its
@@ -98,6 +106,32 @@ export function OrphanStrip({ mirror }: { mirror: UseMirror }) {
           <button
             onClick={trashOrphanFiles}
             title={`Move ${orphanFiles.length} orphan clip file(s) to trash. Recoverable.`}
+            className="shrink-0 px-2 py-0.5 text-[11px] rounded bg-surface
+                       hover:bg-alert hover:text-bg text-muted transition-colors"
+          >
+            Trash all
+          </button>
+        </div>
+      )}
+      {/* COMPRESSED orphans: a compressed copy whose clip is gone. */}
+      {orphanComp.length > 0 && (
+        <div className="flex items-center gap-2 px-3 py-1.5 border-b border-surface/40">
+          <span className="w-1.5 h-1.5 rounded-full bg-warn shrink-0" aria-hidden />
+          <span className="tabular-nums text-warn font-semibold text-[10px]">
+            {orphanComp.length}
+          </span>
+          <span className="text-muted text-[10px] uppercase tracking-wide">
+            orphan compressed
+          </span>
+          <span
+            className="text-muted text-[11px] truncate flex-1"
+            title={orphanComp.slice(0, 20).join("\n")}
+          >
+            — clip trashed or renamed
+          </span>
+          <button
+            onClick={trashOrphanCompressed}
+            title={`Move ${orphanComp.length} compressed file(s) to trash and remove emptied folders. Recoverable.`}
             className="shrink-0 px-2 py-0.5 text-[11px] rounded bg-surface
                        hover:bg-alert hover:text-bg text-muted transition-colors"
           >
