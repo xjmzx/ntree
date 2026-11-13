@@ -198,6 +198,8 @@ export default function App() {
   // moments the answer can change. Cheap: a directory walk, no analysis.
   const [drift, setDrift] = useState<LibraryDrift | null>(null);
   const [driftDismissed, setDriftDismissed] = useState(false);
+  // The drift notice opens folded to its summary; the paths are one click away.
+  const [driftPathsOpen, setDriftPathsOpen] = useState(false);
   useEffect(() => {
     setDriftDismissed(false);
     libraryDrift()
@@ -882,7 +884,7 @@ export default function App() {
   }, [report, filteredRows, libRoot, anyFilter]);
 
   return (
-    <div className="h-screen p-6 max-w-[1500px] mx-auto flex flex-col gap-4">
+    <div className="h-screen p-6 max-w-[1500px] mx-auto flex flex-col gap-4 overflow-y-auto">
       <header className="shrink-0 rounded-lg bg-panel shadow-md
                          px-4 py-3 flex md:grid md:grid-cols-[1fr_auto_1fr]
                          items-center gap-4">
@@ -1150,6 +1152,17 @@ export default function App() {
                     {drift.generated && <> · scanned {drift.generated}</>}
                   </p>
                   {[...drift.stale, ...drift.unindexed].length > 0 && (
+                    <button
+                      onClick={() => setDriftPathsOpen((v) => !v)}
+                      aria-expanded={driftPathsOpen}
+                      className="mt-1 text-[11px] text-muted hover:text-fg underline-offset-2 hover:underline"
+                    >
+                      {driftPathsOpen
+                        ? "Hide paths"
+                        : `Show ${(drift.stale.length + drift.unindexed.length).toLocaleString()} path${drift.stale.length + drift.unindexed.length === 1 ? "" : "s"}`}
+                    </button>
+                  )}
+                  {driftPathsOpen && [...drift.stale, ...drift.unindexed].length > 0 && (
                     <ul className="mt-1.5 space-y-0.5 font-mono text-[11px] text-muted max-h-32 overflow-y-auto">
                       {drift.stale.map((p) => (
                         <li key={`s-${p}`} className="break-all">
@@ -1246,7 +1259,10 @@ export default function App() {
         {/* Main row — [ Sample ][ Library ][ Radio ]. The Library is the
             dominant center surface; each flank collapses to a strip to give it
             more width. Mirrors ndisc.smpl's flanked-Library layout. */}
-        <div className={`flex-1 min-h-0 grid gap-4 ${flankCols}`}>
+        {/* min-h: however many notices are open above, the Library keeps a
+            usable height; past that the page scrolls instead of the Library
+            collapsing under the footer. */}
+        <div className={`flex-1 min-h-[18rem] grid gap-4 ${flankCols}`}>
           {/* Left flank — Sample details + Publish stacked, collapsing
               together to one strip. */}
           {leftCollapsed ? (

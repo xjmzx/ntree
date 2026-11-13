@@ -165,6 +165,42 @@ export function useMirror({
     }
   }
 
+  // Every orphan folder in one go, after one confirmation. After a large ndisc
+  // reorganisation there can be a hundred or more, and trashing them one row
+  // at a time is not a workflow. Each goes through the same per-folder command
+  // (and its checks) as the row button; a failure is reported and the rest
+  // carry on.
+  async function trashOrphanFolders() {
+    const list = orphans;
+    const n = list.length;
+    if (!n) return;
+    const files = list.reduce((a, f) => a + f.audioCount, 0);
+    if (
+      !confirm(
+        `Trash ${n} orphan folder${n === 1 ? "" : "s"} (${files} file${files === 1 ? "" : "s"})? ` +
+          `They have no matching source release. Recoverable — goes to the OS trash.`,
+      )
+    ) {
+      return;
+    }
+    let done = 0;
+    const failed: string[] = [];
+    for (const f of list) {
+      try {
+        await trashDestFolder(dest, libRoot, f.path);
+        done += 1;
+      } catch (e) {
+        failed.push(`${f.rel}: ${e}`);
+      }
+    }
+    onStatus(
+      failed.length
+        ? { text: `trashed ${done} of ${n} orphan folders · ${failed.length} failed: ${failed[0]}`, tone: "alert" }
+        : { text: `trashed ${done} orphan folder${done === 1 ? "" : "s"}`, tone: "ok" },
+    );
+    refreshFolders();
+  }
+
   async function trashOrphanFiles() {
     const n = orphanFiles.length;
     if (!n) return;
@@ -197,6 +233,7 @@ export function useMirror({
     mirrorRels,
     orphans,
     trashFolder,
+    trashOrphanFolders,
     orphanFiles,
     trashOrphanFiles,
   };

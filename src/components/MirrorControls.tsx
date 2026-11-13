@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Hammer, ShieldCheck, Trash2 } from "lucide-react";
 import { cn } from "../lib/cn";
 import type { UseMirror } from "../lib/useMirror";
@@ -68,7 +69,10 @@ export function MirrorControls({
  * something to clean (so it costs zero height when the tree is tidy).
  */
 export function OrphanStrip({ mirror }: { mirror: UseMirror }) {
-  const { orphans, trashFolder, orphanFiles, trashOrphanFiles } = mirror;
+  const { orphans, trashFolder, trashOrphanFolders, orphanFiles, trashOrphanFiles } = mirror;
+  // The folder list opens folded: the count and Trash all are what's usually
+  // wanted, and a hundred-row list at launch squeezed the Library.
+  const [showList, setShowList] = useState(false);
   if (orphans.length === 0 && orphanFiles.length === 0) return null;
   return (
     <div className="rounded-md bg-bg/40 border border-warn/30">
@@ -105,17 +109,37 @@ export function OrphanStrip({ mirror }: { mirror: UseMirror }) {
       {orphans.length > 0 && (
       <>
       <div
-        className="flex items-center gap-2 px-3 py-1.5 text-[10px] uppercase tracking-wide"
+        className="flex items-center gap-2 px-3 py-1.5"
         title="Clip folders with no matching source release — trash to clean up"
       >
         <span className="w-1.5 h-1.5 rounded-full bg-warn shrink-0" aria-hidden />
-        <span className="tabular-nums text-warn font-semibold">
+        <span className="tabular-nums text-warn font-semibold text-[10px]">
           {orphans.length}
         </span>
-        <span className="text-muted">
-          orphan{orphans.length === 1 ? "" : "s"}
+        <span className="text-muted text-[10px] uppercase tracking-wide">
+          orphan folder{orphans.length === 1 ? "" : "s"}
         </span>
+        <span className="text-muted text-[11px] truncate flex-1">
+          — no matching source release
+        </span>
+        <button
+          onClick={() => setShowList((v) => !v)}
+          aria-expanded={showList}
+          className="shrink-0 px-2 py-0.5 text-[11px] rounded bg-surface
+                     hover:bg-surfaceHover text-muted hover:text-fg transition-colors"
+        >
+          {showList ? "Hide list" : "Show list"}
+        </button>
+        <button
+          onClick={trashOrphanFolders}
+          title={`Move all ${orphans.length} orphan folder(s) to trash. Recoverable.`}
+          className="shrink-0 px-2 py-0.5 text-[11px] rounded bg-surface
+                     hover:bg-alert hover:text-bg text-muted transition-colors"
+        >
+          Trash all
+        </button>
       </div>
+      {showList && (
       <ul className="max-h-[12rem] overflow-auto divide-y divide-surface/40 border-t border-surface/40">
         {orphans.map((f) => (
           <li
@@ -146,6 +170,7 @@ export function OrphanStrip({ mirror }: { mirror: UseMirror }) {
           </li>
         ))}
       </ul>
+      )}
       </>
       )}
     </div>
