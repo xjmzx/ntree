@@ -17,6 +17,15 @@ ndisc's `published.json` manifest, and `~/.config/ndisc-suite/roots.json`).
 > The **0.2.7** entry covers a six-week, 37-commit stretch that was tagged only
 > at the end of it.
 
+## 0.4.5 — 2026-11-13
+
+### Added
+- **Trash all for orphan folders.** Clip folders with no matching source release can be trashed in one go, after one confirmation, instead of row by row. Each goes through the same command as the row button, to the OS trash (recoverable); a failure is reported and the rest carry on.
+
+### Changed
+- The orphan-folder list and the "scan report no longer matches disk" paths open folded, behind **Show list** / **Show N paths**, so a launch after a big library change no longer fills the window.
+- The Library keeps a minimum height; when the notices above it need more room, the page scrolls instead of the Library collapsing under the footer.
+
 ## 0.4.4 — 2026-11-05
 
 ### Changed — relay.fizx.uk is gone: relay.nfunc.xyz is the only relay
