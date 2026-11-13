@@ -17,6 +17,11 @@ ndisc's `published.json` manifest, and `~/.config/ndisc-suite/roots.json`).
 > The **0.2.7** entry covers a six-week, 37-commit stretch that was tagged only
 > at the end of it.
 
+## 0.4.6 — 2026-11-13
+
+### Added
+- **Orphan compressed files.** The orphan strip now also lists compressed clips whose clip is gone (trashed, or renamed with its source), with its own **Trash all**: to the OS trash, recoverable, and the folders it leaves empty are removed. Until now the clip-side Trash buttons never reached the compress folder, so every removed clip left its compressed copy behind. The check stays silent rather than guess when there are no clips to compare against or the two folders overlap.
+
 ## 0.4.5 — 2026-11-13
 
 ### Added
