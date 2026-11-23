@@ -74,6 +74,7 @@ import {
   WEB_CLIP_MIME,
 } from "./lib/paths";
 import { searchKey } from "./lib/search";
+import { VersionChip } from "./components/VersionChip";
 
 const SAMPLE_SECS = 10;
 const SAMPLE_START_OFFSET_SECS = 30;
@@ -108,13 +109,6 @@ function loadDensity(): Density {
   return v === "wide" || v === "super-slim" ? v : "slim";
 }
 
-// Suite rule (n-suite headers): the version chip shows only
-// major.minor.patch; any pre-release/build suffix (…-beta.2, +build) drops
-// to the tooltip so the chip keeps a fixed, consistent width as releases
-// move from 0.2.0-beta.2 toward 1.3.1.
-function shortVersion(v: string): string {
-  return v.split(/[-+]/)[0];
-}
 
 export default function App() {
   // Report-DB + persisted config + derived selectors, consolidated in one
@@ -912,16 +906,7 @@ export default function App() {
               sample / compress status, but scan progress already has the
               SCANNING row under the source/dest/compress strip, so the chip is
               back to just the version — consistent with nsmpl/ndisc/nplay. */}
-          {appVersion && (
-            <span
-              className="hidden md:inline-flex items-center px-2.5 py-2
-                         rounded-md bg-surface text-mauve font-mono text-xs
-                         shrink-0"
-              title={`v${appVersion}`}
-            >
-              v{shortVersion(appVersion)}
-            </span>
-          )}
+          {appVersion && <VersionChip version={appVersion} />}
           {/* Density selector beside the version, bare — shared placement +
               styling with nsmpl (SUITE.md § Top-bar grammar). */}
           <Segmented
